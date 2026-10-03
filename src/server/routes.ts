@@ -970,11 +970,25 @@ apiRouter.delete("/media-library/:id", (req, res) => {
   }
 });
 
-apiRouter.post("/storage/uploads/request-url", (_req, res) => {
+apiRouter.post("/storage/uploads/request-url", (req, res) => {
   const fileId = randomUUID();
+  const fileName = req.body?.name || `Foto_${fileId.slice(0, 8)}.jpg`;
+  try {
+    const currentMeta = getMediaLibraryMeta();
+    if (!currentMeta.some((m) => m.id === fileId)) {
+      currentMeta.unshift({
+        id: fileId,
+        name: fileName,
+        url: `/api/storage/objects/${fileId}`,
+        createdAt: new Date().toISOString(),
+      });
+      saveMediaLibraryMeta(currentMeta);
+    }
+  } catch {}
   res.json({
     uploadURL: `/api/storage/uploads/${fileId}`,
     objectPath: `/objects/${fileId}`,
+    fileId,
   });
 });
 
@@ -987,7 +1001,10 @@ apiRouter.put("/storage/uploads/:id", (req, res) => {
     try {
       const stats = fs.statSync(filePath);
       const currentMeta = getMediaLibraryMeta();
-      if (!currentMeta.some((m) => m.id === fileId)) {
+      const existing = currentMeta.find((m) => m.id === fileId);
+      if (existing) {
+        existing.size = stats.size;
+      } else {
         currentMeta.unshift({
           id: fileId,
           name: `Foto_${fileId.slice(0, 8)}.jpg`,
@@ -995,8 +1012,8 @@ apiRouter.put("/storage/uploads/:id", (req, res) => {
           createdAt: new Date().toISOString(),
           size: stats.size,
         });
-        saveMediaLibraryMeta(currentMeta);
       }
+      saveMediaLibraryMeta(currentMeta);
     } catch {}
     res.status(200).json({ ok: true });
   });

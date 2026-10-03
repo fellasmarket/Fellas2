@@ -11,6 +11,7 @@ import {
   Sparkles,
   ExternalLink,
 } from "lucide-react";
+import { uploadImagesBatch } from "../lib/image-batch-uploader";
 
 export interface MediaItem {
   id: string;
@@ -25,6 +26,7 @@ export const MediaAdminPanel: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
+  const [uploadPercent, setUploadPercent] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<MediaItem | null>(null);
@@ -56,46 +58,32 @@ export const MediaAdminPanel: React.FC = () => {
 
     const filesArray = Array.from(fileList);
     setUploading(true);
-    setUploadProgress(`Preparando ${filesArray.length} imágenes...`);
+    setUploadPercent(0);
+    setUploadProgress(`Iniciando carga de ${filesArray.length} imágenes...`);
 
     try {
-      const processedFiles: Array<{ name: string; data: string }> = [];
+      const { successCount, failedCount } = await uploadImagesBatch(
+        filesArray,
+        (p) => {
+          setUploadPercent(p.percent);
+          setUploadProgress(
+            `Procesando y subiendo: ${p.current} de ${p.total} (${p.percent}%) — ${p.fileName}`
+          );
+        }
+      );
 
-      for (let i = 0; i < filesArray.length; i++) {
-        const file = filesArray[i];
-        setUploadProgress(`Procesando imagen ${i + 1} de ${filesArray.length}...`);
+      await fetchImages();
 
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = (ev) => resolve(ev.target?.result as string);
-          reader.readAsDataURL(file);
-        });
-
-        processedFiles.push({
-          name: file.name,
-          data: dataUrl,
-        });
-      }
-
-      setUploadProgress(`Guardando ${processedFiles.length} imágenes en el servidor...`);
-      const apiBase = `${import.meta.env.BASE_URL}api`;
-      const res = await fetch(`${apiBase}/media-library/upload-batch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: processedFiles }),
-      });
-
-      if (res.ok) {
-        await fetchImages();
-      } else {
-        alert("Hubo un error al subir el grupo de imágenes.");
+      if (failedCount > 0) {
+        alert(`Se subieron ${successCount} imágenes con éxito (${failedCount} no se pudieron procesar).`);
       }
     } catch (err) {
       console.error("Error in batch upload:", err);
-      alert("Error al procesar las imágenes seleccionadas.");
+      alert("Hubo un error al subir el grupo de imágenes.");
     } finally {
       setUploading(false);
       setUploadProgress("");
+      setUploadPercent(0);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -177,11 +165,22 @@ export const MediaAdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Upload Progress Alert */}
+      {/* Upload Progress Alert & Bar */}
       {uploading && (
-        <div className="p-4 rounded-2xl bg-[#ffd025]/15 border border-[#ffd025]/30 flex items-center justify-center gap-3 animate-pulse">
-          <RefreshCw size={16} className="animate-spin text-[#ffd025]" />
-          <span className="text-xs sm:text-sm font-bold text-[#ffd025]">{uploadProgress}</span>
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#ffd025]/15 border border-[#ffd025]/30 space-y-2.5 animate-fade-in shadow-xl shadow-[#ffd025]/10">
+          <div className="flex items-center justify-between gap-3 text-xs sm:text-sm font-bold text-[#ffd025]">
+            <span className="flex items-center gap-2 truncate">
+              <RefreshCw size={16} className="animate-spin text-[#ffd025] shrink-0" />
+              <span className="truncate">{uploadProgress}</span>
+            </span>
+            <span className="font-mono text-sm font-black shrink-0">{uploadPercent}%</span>
+          </div>
+          <div className="w-full h-2.5 rounded-full bg-black/50 overflow-hidden border border-white/10">
+            <div
+              className="h-full bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] transition-all duration-300 rounded-full"
+              style={{ width: `${uploadPercent}%` }}
+            />
+          </div>
         </div>
       )}
 
