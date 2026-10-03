@@ -51,7 +51,7 @@ import {
   getListDeliveryLocationsQueryKey,
 } from "@workspace/api-client-react";
 import { generateStatsPDF } from "../lib/statsPdf";
-import { MediaLibraryModal } from "../components/media-library-modal";
+import { MediaLibraryModal, type MediaItem } from "../components/media-library-modal";
 import { MediaAdminPanel } from "../components/media-admin-panel";
 
 declare module "@workspace/api-client-react" {
@@ -653,6 +653,26 @@ export default function Storefront() {
   const [adminTab, setAdminTab] =
     useState<"products" | "media" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [quickMediaImages, setQuickMediaImages] = useState<MediaItem[]>([]);
+
+  const loadQuickMediaImages = async () => {
+    try {
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const res = await fetch(`${apiBase}/media-library`);
+      if (res.ok) {
+        const data = await res.json();
+        setQuickMediaImages(data.images || []);
+      }
+    } catch (err) {
+      console.error("Error loading quick media library:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (adminTab === "products" || adminTab === "media") {
+      loadQuickMediaImages();
+    }
+  }, [adminTab]);
   const [adminRole, setAdminRole] = useState<"full" | "delivery" | null>(null);
   const [adminMobileMenuOpen, setAdminMobileMenuOpen] = useState(false);
   const [customerToken, setCustomerToken] = useState<string | null>(() => {
@@ -8086,7 +8106,7 @@ export default function Storefront() {
                       ].filter(Boolean).length;
 
                       return (
-                        <div className={`bg-[#12121e]/98 backdrop-blur-2xl rounded-3xl border-2 ${inlineProduct ? "border-[#ffd025] ring-4 ring-[#ffd025]/20 my-3" : "border-[#ffd025]/40"} p-4 sm:p-6 shadow-2xl shadow-black/90 space-y-4 animate-fade-in text-left`}>
+                        <div className={`bg-[#12121e]/98 backdrop-blur-2xl rounded-3xl border-2 ${inlineProduct ? "border-[#ffd025] ring-4 ring-[#ffd025]/20 my-3" : "border-[#ffd025]/40"} p-4 sm:p-6 shadow-2xl shadow-black/90 space-y-4 animate-fade-in text-left min-w-0 max-w-full overflow-hidden`}>
                           {/* Header con Botón Guardar Principal y Atajo Enter */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
                             <div>
@@ -8131,10 +8151,10 @@ export default function Storefront() {
                                 saveProduct(e);
                               }
                             }}
-                            className="space-y-4"
+                            className="space-y-4 min-w-0 max-w-full overflow-hidden"
                           >
                             {/* 1. SECCIÓN PRINCIPAL: CARGAR IMAGEN (A LA VISTA Y A LA MANO) */}
-                            <div className="rounded-2xl bg-gradient-to-br from-[#1b1b2d] via-[#161626] to-[#12121e] border-2 border-[#ffd025]/50 p-4 sm:p-5 shadow-xl space-y-3">
+                            <div className="rounded-2xl bg-gradient-to-br from-[#1b1b2d] via-[#161626] to-[#12121e] border-2 border-[#ffd025]/50 p-4 sm:p-5 shadow-xl space-y-3 min-w-0 max-w-full overflow-hidden">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#ffd025] flex items-center gap-1.5">
@@ -8150,7 +8170,7 @@ export default function Storefront() {
                                 </span>
                               </div>
 
-                              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                              <div className="flex flex-col sm:flex-row gap-4 items-start min-w-0 max-w-full">
                                 {/* Vista previa grande */}
                                 <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#0a0a10] border-2 border-white/15 flex items-center justify-center overflow-hidden shrink-0 shadow-inner group">
                                   {formState.image ? (
@@ -8191,8 +8211,8 @@ export default function Storefront() {
                                 </div>
 
                                 {/* Botón Subir Archivo + Input URL */}
-                                <div className="flex-1 w-full space-y-2.5">
-                                  <div className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+                                <div className="flex-1 min-w-0 w-full max-w-full space-y-2.5 overflow-hidden">
+                                  <div className="flex flex-wrap gap-2 items-center min-w-0 max-w-full">
                                     <label className="cursor-pointer flex-1 sm:flex-none px-4 py-2.5 bg-[#ffd025] hover:bg-[#ffe066] text-[#0a0a0f] rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-md shadow-[#ffd025]/20 shrink-0">
                                       <Upload size={15} strokeWidth={2.5} />
                                       <span>SUBIR FOTO DESDE TU DISPOSITIVO</span>
@@ -8235,7 +8255,7 @@ export default function Storefront() {
                                     )}
                                   </div>
 
-                                  <div className="flex gap-2">
+                                  <div className="flex gap-2 min-w-0 max-w-full">
                                     <input
                                       type="text"
                                       placeholder="O escribe / pega el link web de la imagen (https://...)"
@@ -8249,6 +8269,76 @@ export default function Storefront() {
                                       className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
                                     />
                                   </div>
+
+                                  {/* Carrusel / Tira rápida de fotos del archivo dentro de la misma tarjeta */}
+                                  {quickMediaImages.length > 0 && (
+                                    <div className="pt-2.5 border-t border-white/10 space-y-1.5 min-w-0 w-full max-w-full overflow-hidden">
+                                      <div className="flex items-center justify-between min-w-0 max-w-full">
+                                        <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                                          <FolderOpen size={12} className="text-[#ffd025] shrink-0" />
+                                          <span className="truncate">Fotos de tu Galería ({quickMediaImages.length}) — Clic para asignar directo:</span>
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setMediaPickerOpen(true)}
+                                          className="text-[10px] text-[#ffd025] hover:text-[#ffe066] font-bold flex items-center gap-1 cursor-pointer transition hover:underline shrink-0 ml-2"
+                                        >
+                                          <span>Pantalla Completa</span>
+                                          <ExternalLink size={10} />
+                                        </button>
+                                      </div>
+
+                                      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 custom-admin-scrollbar min-w-0 w-full max-w-full scroll-smooth">
+                                        {quickMediaImages.slice(0, 25).map((img) => {
+                                          const isSelected = formState.image === img.url;
+                                          return (
+                                            <button
+                                              key={img.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setFormState((prev) => ({ ...prev, image: img.url }));
+                                                showToast("Foto asignada desde la galería");
+                                              }}
+                                              title={img.name}
+                                              className={`relative w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black/60 border-2 shrink-0 transition-all cursor-pointer group ${
+                                                isSelected
+                                                  ? "border-[#ffd025] ring-2 ring-[#ffd025]/50 scale-105 shadow-md shadow-[#ffd025]/20"
+                                                  : "border-white/15 hover:border-[#ffd025]"
+                                              }`}
+                                            >
+                                              <img
+                                                src={img.url}
+                                                alt={img.name}
+                                                className="w-full h-full object-contain p-1"
+                                                loading="lazy"
+                                                onError={(e) => {
+                                                  (e.currentTarget as HTMLImageElement).src =
+                                                    "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                                }}
+                                              />
+                                              {isSelected && (
+                                                <div className="absolute inset-0 bg-[#ffd025]/30 flex items-center justify-center">
+                                                  <div className="w-4 h-4 rounded-full bg-[#ffd025] text-black flex items-center justify-center shadow-md">
+                                                    <Check size={11} strokeWidth={3} />
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setMediaPickerOpen(true)}
+                                          className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-white/20 hover:border-[#ffd025] text-gray-400 hover:text-[#ffd025] flex flex-col items-center justify-center gap-0.5 shrink-0 transition text-[9px] font-bold uppercase cursor-pointer bg-white/5"
+                                          title="Ver todas las fotos o subir nuevas"
+                                        >
+                                          <FolderOpen size={13} />
+                                          <span>Más</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -8520,6 +8610,7 @@ export default function Storefront() {
                           onSelectImage={(url) => {
                             setFormState((prev) => ({ ...prev, image: url }));
                             showToast("Foto seleccionada desde la galería");
+                            loadQuickMediaImages();
                           }}
                           title="Seleccionar Imagen para el Producto"
                         />
@@ -9020,7 +9111,7 @@ export default function Storefront() {
                                           {editingProduct === product.id && (
                                             <div
                                               id={`product-editor-${product.id}`}
-                                              className="col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-4 w-full"
+                                              className="col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-4 w-full min-w-0 max-w-full overflow-hidden"
                                             >
                                               {renderWizardBlock(product)}
                                             </div>
@@ -9144,7 +9235,7 @@ export default function Storefront() {
                                             </tr>
                                             {editingProduct === product.id && (
                                               <tr id={`product-editor-table-${product.id}`}>
-                                                <td colSpan={5} className="p-3 sm:p-5 bg-[#0e0e18] border-y-2 border-[#ffd025]">
+                                                <td colSpan={5} className="p-3 sm:p-5 bg-[#0e0e18] border-y-2 border-[#ffd025] min-w-0 max-w-full overflow-hidden">
                                                   {renderWizardBlock(product)}
                                                 </td>
                                               </tr>

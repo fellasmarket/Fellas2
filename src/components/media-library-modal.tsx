@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Upload,
   Image as ImageIcon,
@@ -63,6 +64,21 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchImages();
+      // Lock scroll on background body
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          onClose();
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        window.removeEventListener("keydown", handleKeyDown);
+      };
     }
   }, [isOpen]);
 
@@ -135,11 +151,25 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
     img.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-5xl h-[90vh] bg-[#12121e] border-2 border-[#ffd025]/40 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-left">
+  const modalNode = (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 999999,
+      }}
+      className="w-full h-full max-w-full max-h-full overflow-hidden flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-[95vw] md:max-w-4xl lg:max-w-5xl h-[88vh] max-h-[850px] bg-[#12121e] border-2 border-[#ffd025]/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-left ring-4 ring-black/70 animate-scale-in"
+      >
         {/* Modal Header */}
-        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between bg-[#171726]">
+        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between bg-[#171726] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[#ffd025]/15 border border-[#ffd025]/30 flex items-center justify-center text-[#ffd025]">
               <FolderOpen size={20} />
@@ -163,6 +193,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={fetchImages}
               disabled={loading}
               title="Recargar archivo"
@@ -171,6 +202,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
               <RefreshCw size={16} className={loading ? "animate-spin text-[#ffd025]" : ""} />
             </button>
             <button
+              type="button"
               onClick={onClose}
               className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors cursor-pointer"
             >
@@ -180,7 +212,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
         </div>
 
         {/* Action Controls & Batch Uploader */}
-        <div className="p-4 sm:p-5 border-b border-white/10 bg-[#141422] flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="p-4 sm:p-5 border-b border-white/10 bg-[#141422] flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0">
           {/* Search Box */}
           <div className="relative w-full sm:w-72">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -219,7 +251,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
 
         {/* Upload Progress Banner & Bar */}
         {uploading && (
-          <div className="px-5 py-3 bg-[#ffd025]/15 border-b border-[#ffd025]/30 space-y-2 animate-fade-in shadow-inner">
+          <div className="px-5 py-3 bg-[#ffd025]/15 border-b border-[#ffd025]/30 space-y-2 animate-fade-in shadow-inner shrink-0">
             <div className="flex items-center justify-between gap-3 text-xs font-bold text-[#ffd025]">
               <span className="flex items-center gap-2 truncate">
                 <RefreshCw size={15} className="animate-spin text-[#ffd025] shrink-0" />
@@ -237,7 +269,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
         )}
 
         {/* Grid of Images */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#0e0e18]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#0e0e18] custom-admin-scrollbar">
           {loading && images.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-500 py-16">
               <RefreshCw size={32} className="animate-spin text-[#ffd025] mb-3" />
@@ -258,6 +290,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
               </p>
               {!searchQuery && (
                 <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="px-6 py-2.5 rounded-xl bg-[#ffd025] text-black font-black uppercase text-xs tracking-wider hover:bg-[#ffe066] transition cursor-pointer"
                 >
@@ -339,13 +372,14 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 py-3 border-t border-white/10 bg-[#171726] flex items-center justify-between">
+        <div className="px-5 py-3 border-t border-white/10 bg-[#171726] flex items-center justify-between shrink-0">
           <span className="text-[11px] text-gray-400">
             {onSelectImage
               ? "💡 Tip: Haz clic en una foto para asignarla automáticamente al producto."
               : "💡 Tip: Puedes subir tantas fotos como quieras y usarlas luego en cualquier producto o banner."}
           </span>
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-1.5 rounded-xl border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer"
           >
@@ -355,4 +389,6 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalNode, document.body) : null;
 };
