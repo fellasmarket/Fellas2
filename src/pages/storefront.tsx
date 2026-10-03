@@ -1884,25 +1884,32 @@ export default function Storefront() {
     }
   };
 
-  const saveProduct = (e: FormEvent) => {
-    e.preventDefault();
+  const saveProduct = async (e?: FormEvent | KeyboardEvent | React.SyntheticEvent) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
+    if (!formState.name || !formState.name.trim()) {
+      showToast("Por favor ingresa el nombre del producto.");
+      return;
+    }
     if (!formState.category || !formState.aisle) {
       showToast("Por favor selecciona una categoría y un pasillo.");
       return;
     }
+    const finalImage = await resolveImageForSave(formState.image);
     const parsedOptions = formState.optionsString
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s !== "");
     const productData = {
-      name: formState.name,
-      price: parseInt(formState.price),
+      name: formState.name.trim(),
+      price: parseInt(formState.price) || 0,
       category: formState.category,
       aisle: formState.aisle,
-      subcategory: formState.subcategory,
-      optionsTitle: formState.optionsTitle,
+      subcategory: formState.subcategory || "",
+      optionsTitle: formState.optionsTitle || "",
       options: parsedOptions,
-      image: formState.image || "",
+      image: finalImage || "",
       oferta: formState.oferta,
       depositoEnabled: formState.depositoEnabled,
       depositoAmount: parseInt(formState.depositoAmount) || 500,
@@ -1917,11 +1924,11 @@ export default function Storefront() {
           ? { ...old, products: old.products.map((p: any) => (p.id === id ? { ...p, ...productData } : p)) }
           : old,
       );
-      showToast("Producto actualizado");
+      showToast("Producto actualizado exitosamente");
       cancelEditing();
       updateProductMut.mutate({ id, data: productData }, { onSuccess: () => refreshMenu(), onError: refreshMenu });
     } else {
-      showToast("Producto creado");
+      showToast("Producto creado exitosamente");
       cancelEditing();
       createProductMut.mutate(
         { data: productData },
@@ -8063,10 +8070,6 @@ export default function Storefront() {
                   {/* Collapsible Step-by-Step Product Wizard (Añadir / Editar) */}
                   {(() => {
                     const renderWizardBlock = (inlineProduct?: Product) => {
-                      const isMainOpen = productFormSubTab === "all" || productFormSubTab === "main" || openProductFormSections.main;
-                      const isMediaOpen = productFormSubTab === "all" || productFormSubTab === "media" || openProductFormSections.media;
-                      const isExtrasOpen = productFormSubTab === "all" || productFormSubTab === "extras" || openProductFormSections.extras;
-
                       const activeExtrasCount = [
                         formState.oferta,
                         formState.contingencyEnabled,
@@ -8076,11 +8079,14 @@ export default function Storefront() {
 
                       return (
                         <div className={`bg-[#12121e]/98 backdrop-blur-2xl rounded-3xl border-2 ${inlineProduct ? "border-[#ffd025] ring-4 ring-[#ffd025]/20 my-3" : "border-[#ffd025]/40"} p-4 sm:p-6 shadow-2xl shadow-black/90 space-y-4 animate-fade-in text-left`}>
-                          {/* Header Compacto */}
+                          {/* Header con Botón Guardar Principal y Atajo Enter */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
                             <div>
                               <div className="flex items-center gap-2 text-[11px] font-bold text-[#ffd025] uppercase tracking-wider mb-0.5">
-                                <Sparkles size={13} /> Editor Compacto de Productos
+                                <Sparkles size={13} /> Editor de Productos
+                                <span className="bg-[#ffd025]/20 text-[#ffd025] border border-[#ffd025]/30 px-2 py-0.5 rounded text-[10px] font-mono">
+                                  Enter ↵ = Guardar y Cerrar
+                                </span>
                               </div>
                               <h3 className="text-base sm:text-lg font-black text-white uppercase flex items-center gap-2">
                                 {inlineProduct
@@ -8088,306 +8094,267 @@ export default function Storefront() {
                                   : "✨ Añadir Nuevo Producto"}
                               </h3>
                             </div>
+
+                            {/* Acciones Rápidas Superiores: GUARDAR A LA MANO */}
                             <div className="flex items-center gap-2 shrink-0">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  const allOpen = openProductFormSections.main && openProductFormSections.media && openProductFormSections.extras;
-                                  const nextState = !allOpen;
-                                  setOpenProductFormSections({ main: nextState, media: nextState, extras: nextState });
-                                  setProductFormSubTab(nextState ? "all" : "main");
-                                }}
-                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold transition-colors border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                                onClick={saveProduct}
+                                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] font-black uppercase text-xs tracking-wider hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-[#ffd025]/25 flex items-center gap-1.5 cursor-pointer ring-2 ring-[#ffd025]/60"
                               >
-                                <Layers size={13} />
-                                <span>{(openProductFormSections.main && openProductFormSections.media && openProductFormSections.extras) ? "Plegar Secciones" : "Desplegar Todo"}</span>
+                                <CheckCircle size={16} />
+                                <span>Guardar (Enter ↵)</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={cancelEditing}
-                                className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-bold transition-colors border border-red-500/20 flex items-center gap-1 cursor-pointer"
+                                className="px-3.5 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-bold transition-colors border border-red-500/20 flex items-center gap-1 cursor-pointer"
                               >
                                 <X size={14} /> Cerrar
                               </button>
                             </div>
                           </div>
 
-                          {/* Sub-Tabs Selector Selector Rápido */}
-                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProductFormSubTab("main");
-                                setOpenProductFormSections((p) => ({ ...p, main: true }));
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border ${
-                                productFormSubTab === "main"
-                                  ? "bg-[#ffd025] text-black border-[#ffd025]"
-                                  : "bg-[#181826] text-gray-300 border-white/10 hover:border-white/20"
-                              }`}
-                            >
-                              <span>📌 1. Datos Principales</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProductFormSubTab("media");
-                                setOpenProductFormSections((p) => ({ ...p, media: true }));
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border ${
-                                productFormSubTab === "media"
-                                  ? "bg-[#ffd025] text-black border-[#ffd025]"
-                                  : "bg-[#181826] text-gray-300 border-white/10 hover:border-white/20"
-                              }`}
-                            >
-                              <span>🖼️ 2. Imagen & Opciones</span>
-                              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${formState.image ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-gray-400"}`}>
-                                {formState.image ? "Con Foto" : "Sin Foto"}
-                              </span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProductFormSubTab("extras");
-                                setOpenProductFormSections((p) => ({ ...p, extras: true }));
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border ${
-                                productFormSubTab === "extras"
-                                  ? "bg-[#ffd025] text-black border-[#ffd025]"
-                                  : "bg-[#181826] text-gray-300 border-white/10 hover:border-white/20"
-                              }`}
-                            >
-                              <span>⚡ 3. Extras & Toggles</span>
-                              {activeExtrasCount > 0 && (
-                                <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-amber-500/20 text-amber-300">
-                                  {activeExtrasCount} activos
+                          <form
+                            onSubmit={saveProduct}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                saveProduct(e);
+                              }
+                            }}
+                            className="space-y-4"
+                          >
+                            {/* 1. SECCIÓN PRINCIPAL: CARGAR IMAGEN (A LA VISTA Y A LA MANO) */}
+                            <div className="rounded-2xl bg-gradient-to-br from-[#1b1b2d] via-[#161626] to-[#12121e] border-2 border-[#ffd025]/50 p-4 sm:p-5 shadow-xl space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#ffd025] flex items-center gap-1.5">
+                                    <Upload size={16} className="text-[#ffd025]" />
+                                    Cargar Imagen del Producto
+                                  </span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${formState.image ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-amber-500/20 text-amber-300 border border-amber-500/30"}`}>
+                                    {formState.image ? "✓ Foto Asignada" : "⚠️ Sin Foto"}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] text-gray-400 hidden sm:inline">
+                                  Acceso rápido e inmediato
                                 </span>
-                              )}
-                            </button>
+                              </div>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProductFormSubTab("all");
-                                setOpenProductFormSections({ main: true, media: true, extras: true });
-                              }}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border ${
-                                productFormSubTab === "all"
-                                  ? "bg-white/20 text-white border-white/30"
-                                  : "bg-white/5 text-gray-400 border-white/5 hover:text-white"
-                              }`}
-                            >
-                              📑 Ver Todo
-                            </button>
-                          </div>
+                              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                                {/* Vista previa grande */}
+                                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#0a0a10] border-2 border-white/15 flex items-center justify-center overflow-hidden shrink-0 shadow-inner group">
+                                  {formState.image ? (
+                                    <>
+                                      <img
+                                        src={formState.image}
+                                        alt="Preview"
+                                        className="w-full h-full object-contain p-1.5 group-hover:scale-105 transition-transform"
+                                        onError={(e) => {
+                                          (e.currentTarget as HTMLImageElement).src =
+                                            "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        title="Quitar foto"
+                                        onClick={() => {
+                                          if (formState.image.includes("/storage/objects/")) {
+                                            handleDeleteStorageImage(formState.image, () =>
+                                              setFormState({ ...formState, image: "" }),
+                                            );
+                                          } else {
+                                            setFormState({ ...formState, image: "" });
+                                          }
+                                        }}
+                                        className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-red-400 text-[10px] font-bold transition-opacity cursor-pointer"
+                                      >
+                                        <Trash2 size={16} />
+                                        <span>Quitar</span>
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <div className="text-center p-2 text-gray-500 flex flex-col items-center">
+                                      <Package size={26} className="text-[#ffd025]/50 mb-1" />
+                                      <span className="text-[9px] uppercase font-bold text-gray-400">Sin Foto</span>
+                                    </div>
+                                  )}
+                                </div>
 
-                          {/* Formulario con Secciones Plegables Accordion */}
-                          <form onSubmit={saveProduct} className="space-y-3">
-                            {/* 1. INFORMACIÓN PRINCIPAL (Accordeón Plegable) */}
+                                {/* Botón Subir Archivo + Input URL */}
+                                <div className="flex-1 w-full space-y-2.5">
+                                  <div className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+                                    <label className="cursor-pointer flex-1 sm:flex-none px-4 py-2.5 bg-[#ffd025] hover:bg-[#ffe066] text-[#0a0a0f] rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-md shadow-[#ffd025]/20 shrink-0">
+                                      <Upload size={15} strokeWidth={2.5} />
+                                      <span>SUBIR FOTO DESDE TU DISPOSITIVO</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) =>
+                                          handleImageUpload(e, (url) => setFormState({ ...formState, image: url }))
+                                        }
+                                      />
+                                    </label>
+
+                                    {formState.image && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (formState.image.includes("/storage/objects/")) {
+                                            handleDeleteStorageImage(formState.image, () =>
+                                              setFormState({ ...formState, image: "" }),
+                                            );
+                                          } else {
+                                            setFormState({ ...formState, image: "" });
+                                          }
+                                        }}
+                                        className="px-3 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                                      >
+                                        <Trash2 size={13} />
+                                        <span>Quitar</span>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      placeholder="O escribe / pega el link web de la imagen (https://...)"
+                                      value={formState.image.includes("/storage/objects/") ? "" : formState.image}
+                                      onChange={(e) => setFormState({ ...formState, image: e.target.value })}
+                                      onBlur={(e) =>
+                                        resolveImageUrl(e.target.value, (resolved) =>
+                                          setFormState((prev) => ({ ...prev, image: resolved })),
+                                        )
+                                      }
+                                      className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 2. DATOS PRINCIPALES (NOMBRE, PRECIO, CATEGORÍA, PASILLO) */}
+                            <div className="rounded-2xl bg-[#181826] border border-white/10 p-4 space-y-3">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="md:col-span-2 space-y-1">
+                                  <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                    Nombre del Producto *
+                                  </label>
+                                  <input
+                                    required
+                                    type="text"
+                                    placeholder="Ej: Cerveza Austral Calafate 6x330ml..."
+                                    value={formState.name}
+                                    onChange={(e) => setFormState({ ...formState, name: e.target.value })}
+                                    className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                    Precio de Venta ($ CLP) *
+                                  </label>
+                                  <input
+                                    required
+                                    type="number"
+                                    min="0"
+                                    placeholder="Ej: 12990"
+                                    value={formState.price}
+                                    onChange={(e) => setFormState({ ...formState, price: e.target.value })}
+                                    className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-[#ffd025] font-black text-xs focus:border-[#ffd025] focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                    Categoría Principal *
+                                  </label>
+                                  <select
+                                    required
+                                    value={formState.category}
+                                    onChange={(e) => setFormState({ ...formState, category: e.target.value })}
+                                    className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                  >
+                                    <option value="">Seleccionar Categoría...</option>
+                                    {categories.map((c) => (
+                                      <option key={c} value={c}>
+                                        {c}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                    Pasillo Separador *
+                                  </label>
+                                  <select
+                                    required
+                                    value={formState.aisle}
+                                    onChange={(e) => setFormState({ ...formState, aisle: e.target.value })}
+                                    className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                  >
+                                    <option value="">Seleccionar Pasillo...</option>
+                                    {aisles.map((a) => (
+                                      <option key={a} value={a}>
+                                        {a}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 3. OPCIONES SECUNDARIAS (PLEGABLE Y COMPACTO) */}
                             <div className="rounded-2xl bg-[#181826] border border-white/10 overflow-hidden">
                               <button
                                 type="button"
                                 onClick={() =>
-                                  setOpenProductFormSections((p) => ({ ...p, main: !p.main }))
+                                  setOpenProductFormSections((p) => ({ ...p, extras: !p.extras }))
                                 }
                                 className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
                               >
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-black uppercase text-[#ffd025]">📌 1. Información Principal</span>
-                                  {formState.name && (
-                                    <span className="text-[10px] text-gray-400 font-bold truncate max-w-[200px]">
-                                      — {formState.name} (${Number(formState.price || 0).toLocaleString("es-CL")})
+                                  <span className="text-xs font-black uppercase text-gray-300">
+                                    ⚙️ Opciones Secundarias (Subcategoría, Variantes, Oferta, Contingencia)
+                                  </span>
+                                  {activeExtrasCount > 0 && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300">
+                                      {activeExtrasCount} activos
                                     </span>
                                   )}
                                 </div>
                                 <div className="text-gray-400">
-                                  {isMainOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                  {openProductFormSections.extras ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                 </div>
                               </button>
 
-                              {isMainOpen && (
+                              {openProductFormSections.extras && (
                                 <div className="p-4 pt-0 border-t border-white/5 space-y-3 animate-fade-in mt-3">
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <div className="md:col-span-2 space-y-1">
-                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                                        Nombre del Producto *
-                                      </label>
-                                      <input
-                                        required
-                                        type="text"
-                                        placeholder="Ej: Cerveza Austral Calafate 6x330ml..."
-                                        value={formState.name}
-                                        onChange={(e) => setFormState({ ...formState, name: e.target.value })}
-                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                                        Precio de Venta ($ CLP) *
-                                      </label>
-                                      <input
-                                        required
-                                        type="number"
-                                        min="0"
-                                        placeholder="Ej: 12990"
-                                        value={formState.price}
-                                        onChange={(e) => setFormState({ ...formState, price: e.target.value })}
-                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-[#ffd025] font-black text-xs focus:border-[#ffd025] focus:outline-none"
-                                      />
-                                    </div>
+                                  {/* Subcategoría */}
+                                  <div className="space-y-1">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                      Subcategoría / Tag (Opcional)
+                                    </label>
+                                    <select
+                                      value={formState.subcategory}
+                                      onChange={(e) => setFormState({ ...formState, subcategory: e.target.value })}
+                                      className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                    >
+                                      <option value="">Sin subcategoría...</option>
+                                      {subcategories.map((s) => (
+                                        <option key={s} value={s}>
+                                          {s}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </div>
 
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div className="space-y-1">
-                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                                        Categoría Principal *
-                                      </label>
-                                      <select
-                                        required
-                                        value={formState.category}
-                                        onChange={(e) => setFormState({ ...formState, category: e.target.value })}
-                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
-                                      >
-                                        <option value="">Seleccionar Categoría...</option>
-                                        {categories.map((c) => (
-                                          <option key={c} value={c}>
-                                            {c}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                                        Pasillo Separador *
-                                      </label>
-                                      <select
-                                        required
-                                        value={formState.aisle}
-                                        onChange={(e) => setFormState({ ...formState, aisle: e.target.value })}
-                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
-                                      >
-                                        <option value="">Seleccionar Pasillo...</option>
-                                        {aisles.map((a) => (
-                                          <option key={a} value={a}>
-                                            {a}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                                        Subcategoría / Tag (Opcional)
-                                      </label>
-                                      <select
-                                        value={formState.subcategory}
-                                        onChange={(e) => setFormState({ ...formState, subcategory: e.target.value })}
-                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
-                                      >
-                                        <option value="">Sin subcategoría...</option>
-                                        {subcategories.map((s) => (
-                                          <option key={s} value={s}>
-                                            {s}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* 2. MULTIMEDIA Y VARIANTES (Accordeón Plegable) */}
-                            <div className="rounded-2xl bg-[#181826] border border-white/10 overflow-hidden">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setOpenProductFormSections((p) => ({ ...p, media: !p.media }))
-                                }
-                                className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-black uppercase text-[#ffd025]">🖼️ 2. Imagen & Opciones</span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded font-mono ${formState.image ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-gray-400"}`}>
-                                    {formState.image ? "Foto Cargada" : "Sin Foto"}
-                                  </span>
-                                </div>
-                                <div className="text-gray-400">
-                                  {isMediaOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </div>
-                              </button>
-
-                              {isMediaOpen && (
-                                <div className="p-4 pt-0 border-t border-white/5 space-y-3 animate-fade-in mt-3">
-                                  <div className="flex flex-col sm:flex-row gap-3 items-center">
-                                    <div className="relative w-16 h-16 rounded-xl bg-[#12121d] border border-white/10 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                                      {formState.image ? (
-                                        <img
-                                          src={formState.image}
-                                          alt="Preview"
-                                          className="w-full h-full object-contain p-1"
-                                          onError={(e) => {
-                                            (e.currentTarget as HTMLImageElement).style.display = "none";
-                                          }}
-                                        />
-                                      ) : (
-                                        <div className="text-center p-1 text-gray-500">
-                                          <Package size={18} className="mx-auto opacity-50" />
-                                          <span className="text-[8px] uppercase font-bold block">Sin foto</span>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="flex-1 w-full space-y-1.5">
-                                      <div className="flex gap-2">
-                                        <input
-                                          type="text"
-                                          placeholder="Pegar link de imagen externa (https://...)"
-                                          value={formState.image.includes("/storage/objects/") ? "" : formState.image}
-                                          onChange={(e) => setFormState({ ...formState, image: e.target.value })}
-                                          onBlur={(e) =>
-                                            resolveImageUrl(e.target.value, (resolved) =>
-                                              setFormState((prev) => ({ ...prev, image: resolved })),
-                                            )
-                                          }
-                                          className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
-                                        />
-                                        <label className="cursor-pointer px-3 py-2.5 bg-[#ffd025]/10 text-[#ffd025] hover:bg-[#ffd025] hover:text-[#141414] rounded-xl text-xs font-black text-center transition flex items-center gap-1 border border-[#ffd025]/20 shrink-0">
-                                          <Upload size={13} /> Subir
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) =>
-                                              handleImageUpload(e, (url) => setFormState({ ...formState, image: url }))
-                                            }
-                                          />
-                                        </label>
-                                        {formState.image && (
-                                          <button
-                                            type="button"
-                                            title="Eliminar foto"
-                                            onClick={() => {
-                                              if (formState.image.includes("/storage/objects/")) {
-                                                handleDeleteStorageImage(formState.image, () =>
-                                                  setFormState({ ...formState, image: "" }),
-                                                );
-                                              } else {
-                                                setFormState({ ...formState, image: "" });
-                                              }
-                                            }}
-                                            className="px-2.5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-xs font-black transition shrink-0 cursor-pointer"
-                                          >
-                                            <Trash2 size={13} />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
+                                  {/* Presentaciones */}
                                   <div className="pt-2 border-t border-white/5 space-y-1.5">
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
                                       Opciones / Presentaciones (Opcional)
@@ -8409,35 +8376,9 @@ export default function Storefront() {
                                       />
                                     </div>
                                   </div>
-                                </div>
-                              )}
-                            </div>
 
-                            {/* 3. ATRIBUTOS Y EXTRAS (Accordeón Plegable) */}
-                            <div className="rounded-2xl bg-[#181826] border border-white/10 overflow-hidden">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setOpenProductFormSections((p) => ({ ...p, extras: !p.extras }))
-                                }
-                                className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-black uppercase text-[#ffd025]">⚡ 3. Atributos Especiales & Extras</span>
-                                  {activeExtrasCount > 0 && (
-                                    <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300">
-                                      {activeExtrasCount} activos
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-gray-400">
-                                  {isExtrasOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </div>
-                              </button>
-
-                              {isExtrasOpen && (
-                                <div className="p-4 pt-0 border-t border-white/5 space-y-3 animate-fade-in mt-3">
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {/* Toggles */}
+                                  <div className="pt-2 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {/* Oferta Toggle */}
                                     <div
                                       onClick={() => setFormState({ ...formState, oferta: !formState.oferta })}
@@ -8526,22 +8467,27 @@ export default function Storefront() {
                               )}
                             </div>
 
-                            {/* Botones de Guardado Unificados Compactos */}
-                            <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-white/10">
-                              <button
-                                type="button"
-                                onClick={cancelEditing}
-                                className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                Plegar / Cancelar
-                              </button>
-                              <button
-                                type="submit"
-                                className="w-full sm:w-auto px-7 py-2.5 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-xl font-black uppercase text-xs tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#ffd025]/20 flex items-center justify-center gap-2 cursor-pointer"
-                              >
-                                <CheckCircle size={15} />
-                                {inlineProduct ? "Guardar Cambios" : "Crear Producto"}
-                              </button>
+                            {/* Barra de Guardado Inferior */}
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-white/10">
+                              <span className="text-[11px] text-gray-400 font-mono flex items-center gap-1.5">
+                                💡 Tip: Puedes presionar <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[#ffd025] font-bold">Enter ↵</kbd> en cualquier campo para guardar y cerrar.
+                              </span>
+                              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                                <button
+                                  type="button"
+                                  onClick={cancelEditing}
+                                  className="px-5 py-2.5 rounded-xl border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="px-7 py-2.5 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-xl font-black uppercase text-xs tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#ffd025]/20 flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                  <CheckCircle size={15} />
+                                  {inlineProduct ? "Guardar y Cerrar (Enter ↵)" : "Crear Producto"}
+                                </button>
+                              </div>
                             </div>
                           </form>
                         </div>
