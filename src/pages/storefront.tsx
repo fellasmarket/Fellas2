@@ -51,6 +51,8 @@ import {
   getListDeliveryLocationsQueryKey,
 } from "@workspace/api-client-react";
 import { generateStatsPDF } from "../lib/statsPdf";
+import { MediaLibraryModal } from "../components/media-library-modal";
+import { MediaAdminPanel } from "../components/media-admin-panel";
 
 declare module "@workspace/api-client-react" {
   interface Settings {
@@ -156,6 +158,7 @@ import {
   Pencil,
   CreditCard,
   Share2,
+  FolderOpen,
   ImageIcon,
   Copy,
   UserPlus,
@@ -648,7 +651,8 @@ export default function Storefront() {
     { product: Product; selectedOption: string } | null
   >(null);
   const [adminTab, setAdminTab] =
-    useState<"products" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
+    useState<"products" | "media" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [adminRole, setAdminRole] = useState<"full" | "delivery" | null>(null);
   const [adminMobileMenuOpen, setAdminMobileMenuOpen] = useState(false);
   const [customerToken, setCustomerToken] = useState<string | null>(() => {
@@ -4275,6 +4279,7 @@ export default function Storefront() {
               </div>
               {[
                 { id: "products", label: "Productos", icon: Package, desc: "Catálogo, fotos y stock" },
+                { id: "media", label: "Archivo de Imágenes", icon: FolderOpen, desc: "Subida en grupo y galería" },
                 { id: "classifications", label: "Clasificaciones", icon: Tag, desc: "Categorías y pasillos" },
                 { id: "contingency", label: "Tienda Contingencia", icon: AlertTriangle, desc: "Pasillos y catálogo reducido" },
                 { id: "orders", label: "Pedidos", icon: ClipboardList, desc: "Comandas en vivo" },
@@ -4368,6 +4373,7 @@ export default function Storefront() {
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto custom-admin-scrollbar">
                   {[
                     { id: "products", label: "Productos", icon: Package },
+                    { id: "media", label: "Archivo de Imágenes", icon: FolderOpen },
                     { id: "classifications", label: "Clasificaciones", icon: Tag },
                     { id: "contingency", label: "Tienda Contingencia", icon: AlertTriangle },
                     { id: "orders", label: "Pedidos", icon: ClipboardList },
@@ -4418,6 +4424,7 @@ export default function Storefront() {
               <div>
                 <h1 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
                   {adminTab === "products" && "📦 Gestión de Productos y Catálogo"}
+                  {adminTab === "media" && "📁 Archivo de Imágenes y Galería de Medios"}
                   {adminTab === "classifications" && "🏷️ Clasificaciones, Categorías y Pasillos"}
                   {adminTab === "orders" && "📋 Control de Pedidos y Comandas"}
                   {adminTab === "stats" && "📊 Reportes y Estadísticas de Venta"}
@@ -4447,6 +4454,7 @@ export default function Storefront() {
 
             {/* Main Content Padding */}
             <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+              {adminTab === "media" && <MediaAdminPanel />}
               {adminTab === "orders" && <OrdersAdminPanel role={adminRole ?? "full"} />}
 
             {adminTab === "stats" && <StatsAdminPanel />}
@@ -8198,6 +8206,15 @@ export default function Storefront() {
                                       />
                                     </label>
 
+                                    <button
+                                      type="button"
+                                      onClick={() => setMediaPickerOpen(true)}
+                                      className="cursor-pointer flex-1 sm:flex-none px-4 py-2.5 bg-white/10 hover:bg-[#ffd025] hover:text-[#0a0a0f] text-gray-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 border border-white/15 shadow-sm shrink-0"
+                                    >
+                                      <FolderOpen size={15} />
+                                      <span>ELEGIR DEL ARCHIVO / GALERÍA</span>
+                                    </button>
+
                                     {formState.image && (
                                       <button
                                         type="button"
@@ -8496,6 +8513,17 @@ export default function Storefront() {
 
                     return (
                       <>
+                        {/* Modal selector de galería de imágenes para productos */}
+                        <MediaLibraryModal
+                          isOpen={mediaPickerOpen}
+                          onClose={() => setMediaPickerOpen(false)}
+                          onSelectImage={(url) => {
+                            setFormState((prev) => ({ ...prev, image: url }));
+                            showToast("Foto seleccionada desde la galería");
+                          }}
+                          title="Seleccionar Imagen para el Producto"
+                        />
+
                         {/* Top Wizard (solo cuando se añade nuevo producto) */}
                         {showAddProductModal && editingProduct === null && renderWizardBlock()}
 

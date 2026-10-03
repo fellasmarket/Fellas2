@@ -829,7 +829,147 @@ apiRouter.post("/customers/cart", (req, res) => {
   res.json({ ok: true, cart: saved.items });
 });
 
-// 14. File Storage for images
+// 14. File Storage & Media Library for batch images
+const MEDIA_META_FILE = path.join(DATA_DIR, "media_library.json");
+
+interface MediaMetaItem {
+  id: string;
+  name: string;
+  url: string;
+  createdAt: string;
+  size?: number;
+}
+
+function getMediaLibraryMeta(): MediaMetaItem[] {
+  try {
+    if (fs.existsSync(MEDIA_META_FILE)) {
+      return JSON.parse(fs.readFileSync(MEDIA_META_FILE, "utf-8"));
+    }
+  } catch {}
+  return [];
+}
+
+function saveMediaLibraryMeta(items: MediaMetaItem[]) {
+  try {
+    fs.writeFileSync(MEDIA_META_FILE, JSON.stringify(items, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving media library meta:", err);
+  }
+}
+
+apiRouter.get("/media-library", (_req, res) => {
+  try {
+    const metaList = getMediaLibraryMeta();
+    const metaMap = new Map<string, MediaMetaItem>(metaList.map((m) => [m.id, m]));
+    const files = fs.readdirSync(UPLOADS_DIR);
+    let changed = false;
+
+    // Scan disk and ensure every file has a meta item
+    for (const file of files) {
+      if (!metaMap.has(file)) {
+        try {
+          const stats = fs.statSync(path.join(UPLOADS_DIR, file));
+          if (stats.isFile()) {
+            const newItem: MediaMetaItem = {
+              id: file,
+              name: `Imagen_${file.slice(0, 8)}.jpg`,
+              url: `/api/storage/objects/${file}`,
+              createdAt: stats.mtime.toISOString(),
+              size: stats.size,
+            };
+            metaMap.set(file, newItem);
+            changed = true;
+          }
+        } catch {}
+      }
+    }
+
+    // Clean up items whose files on disk no longer exist
+    const validItems: MediaMetaItem[] = [];
+    for (const [id, item] of metaMap.entries()) {
+      if (fs.existsSync(path.join(UPLOADS_DIR, id))) {
+        validItems.push(item);
+      } else {
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      saveMediaLibraryMeta(validItems);
+    }
+
+    // Sort newest first
+    validItems.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({ images: validItems });
+  } catch (err) {
+    console.error("Error reading media library:", err);
+    res.status(500).json({ error: "Failed to load media library" });
+  }
+});
+
+// Batch upload endpoint: accepts multiple images at once
+apiRouter.post("/media-library/upload-batch", (req, res) => {
+  try {
+    const { files } = req.body as { files: Array<{ name: string; data: string }> };
+    if (!Array.isArray(files) || files.length === 0) {
+      res.status(400).json({ error: "No files provided in files array" });
+      return;
+    }
+
+    const currentMeta = getMediaLibraryMeta();
+    const newItems: MediaMetaItem[] = [];
+
+    for (const item of files) {
+      if (!item.data) continue;
+      const fileId = randomUUID();
+      const filePath = path.join(UPLOADS_DIR, fileId);
+
+      // Extract base64
+      let base64Data = item.data;
+      if (base64Data.includes(";base64,")) {
+        base64Data = base64Data.split(";base64,")[1];
+      }
+
+      const buffer = Buffer.from(base64Data, "base64");
+      fs.writeFileSync(filePath, buffer);
+
+      const metaItem: MediaMetaItem = {
+        id: fileId,
+        name: item.name || `Imagen_${fileId.slice(0, 8)}.jpg`,
+        url: `/api/storage/objects/${fileId}`,
+        createdAt: new Date().toISOString(),
+        size: buffer.length,
+      };
+
+      newItems.push(metaItem);
+      currentMeta.unshift(metaItem);
+    }
+
+    saveMediaLibraryMeta(currentMeta);
+    res.json({ ok: true, uploaded: newItems, total: currentMeta.length });
+  } catch (err) {
+    console.error("Batch upload error:", err);
+    res.status(500).json({ error: "Failed to upload batch images" });
+  }
+});
+
+apiRouter.delete("/media-library/:id", (req, res) => {
+  const fileId = req.params.id;
+  const filePath = path.join(UPLOADS_DIR, fileId);
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    const currentMeta = getMediaLibraryMeta().filter((m) => m.id !== fileId);
+    saveMediaLibraryMeta(currentMeta);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Delete media error:", err);
+    res.status(500).json({ error: "Failed to delete image" });
+  }
+});
+
 apiRouter.post("/storage/uploads/request-url", (_req, res) => {
   const fileId = randomUUID();
   res.json({
@@ -844,6 +984,20 @@ apiRouter.put("/storage/uploads/:id", (req, res) => {
   const writeStream = fs.createWriteStream(filePath);
   req.pipe(writeStream);
   writeStream.on("finish", () => {
+    try {
+      const stats = fs.statSync(filePath);
+      const currentMeta = getMediaLibraryMeta();
+      if (!currentMeta.some((m) => m.id === fileId)) {
+        currentMeta.unshift({
+          id: fileId,
+          name: `Foto_${fileId.slice(0, 8)}.jpg`,
+          url: `/api/storage/objects/${fileId}`,
+          createdAt: new Date().toISOString(),
+          size: stats.size,
+        });
+        saveMediaLibraryMeta(currentMeta);
+      }
+    } catch {}
     res.status(200).json({ ok: true });
   });
   writeStream.on("error", (err) => {
@@ -870,6 +1024,8 @@ apiRouter.delete("/storage/objects/:id", (req, res) => {
       fs.unlinkSync(filePath);
     } catch {}
   }
+  const currentMeta = getMediaLibraryMeta().filter((m) => m.id !== fileId);
+  saveMediaLibraryMeta(currentMeta);
   res.json({ ok: true });
 });
 
