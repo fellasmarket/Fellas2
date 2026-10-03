@@ -8,6 +8,7 @@ import {
   ChangeEvent,
   DragEvent,
 } from "react";
+import { motion, AnimatePresence } from "motion/react";
 
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -236,6 +237,35 @@ const subcategoryEmoji = (name: string): string => {
   if (/nacional|chile/.test(n)) return "🇨🇱";
   return "✨";
 };
+
+const DEFAULT_AISLE_BANNERS: Record<string, string> = {
+  cervezas: "https://images.unsplash.com/photo-1608270199929-e0930fca6a15?w=1600&auto=format&fit=crop&q=80",
+  destilados: "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=1600&auto=format&fit=crop&q=80",
+  vinos: "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=1600&auto=format&fit=crop&q=80",
+  snacks: "https://images.unsplash.com/photo-1621939514649-280e2ee25f60?w=1600&auto=format&fit=crop&q=80",
+  bebidas: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=1600&auto=format&fit=crop&q=80",
+  packs: "https://images.unsplash.com/photo-1543007630-9710e4a00a20?w=1600&auto=format&fit=crop&q=80",
+  promociones: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=1600&auto=format&fit=crop&q=80",
+  cigarrillos: "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80",
+  hielo: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=1600&auto=format&fit=crop&q=80",
+  dulces: "https://images.unsplash.com/photo-1582293041079-7814c2f12063?w=1600&auto=format&fit=crop&q=80",
+};
+
+function getAisleBannerImage(aisleName?: string, customImage?: string): string {
+  if (customImage && customImage.trim().length > 0) return customImage;
+  if (!aisleName) return "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80";
+  const nameNorm = aisleName.toLowerCase();
+  if (/cerveza|beer|chela|lager|ipa|stout|pilsen/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.cervezas;
+  if (/destilad|licor|whisky|whiskey|pisco|ron|vodka|gin|tequila|coctel|cocktail/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.destilados;
+  if (/vino|wine|tinto|blanco|rosado|espumante|champagne|prosec/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.vinos;
+  if (/snack|papa|chips|maní|mani|nuez|fruto|papas|frito/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.snacks;
+  if (/bebida|jugo|gaseosa|soda|agua|energ/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.bebidas;
+  if (/pack|combo|promo|oferta/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.packs;
+  if (/cigarro|cigarrillo|tabaco|vape|vapeador/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.cigarrillos;
+  if (/hielo|ice/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.hielo;
+  if (/dulce|chocolat|galleta|caramelo/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.dulces;
+  return "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80";
+}
 
 const normalize = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -773,6 +803,8 @@ export default function Storefront() {
   const [showAddProductModal, setShowAddProductModal] = useState<boolean>(false);
   const [productWizardStep, setProductWizardStep] = useState<1 | 2 | 3>(1);
   const [productViewMode, setProductViewMode] = useState<"grid" | "table">("grid");
+  const [openProductFormSections, setOpenProductFormSections] = useState<{ main: boolean; media: boolean; extras: boolean }>({ main: true, media: false, extras: false });
+  const [productFormSubTab, setProductFormSubTab] = useState<"all" | "main" | "media" | "extras">("main");
   const [productFilterSpecial, setProductFilterSpecial] = useState<"all" | "oferta" | "contingency" | "retornable">("all");
   const [classificationsSubTab, setClassificationsSubTab] = useState<"categories" | "aisles" | "subcategories" | "all">("categories");
   const [openClassificationsSections, setOpenClassificationsSections] = useState<Record<string, boolean>>({
@@ -1722,6 +1754,8 @@ export default function Storefront() {
     setEditingProduct(product.id);
     setProductWizardStep(1);
     setShowAddProductModal(false);
+    setOpenProductFormSections({ main: true, media: false, extras: false });
+    setProductFormSubTab("main");
     setFormState({
       name: product.name,
       price: String(product.price),
@@ -1744,6 +1778,8 @@ export default function Storefront() {
     setEditingProduct(null);
     setShowAddProductModal(false);
     setProductWizardStep(1);
+    setOpenProductFormSections({ main: true, media: false, extras: false });
+    setProductFormSubTab("main");
     setFormState(DEFAULT_FORM);
   };
 
@@ -2187,6 +2223,7 @@ export default function Storefront() {
                     <button
                       key={sec.name}
                       onClick={() => {
+                        setNavQuickFilter("");
                         if (sec.type === "category") {
                           setActiveAisle("");
                           setActiveCategory(sec.name);
@@ -2194,7 +2231,10 @@ export default function Storefront() {
                           setActiveCategory("");
                           setActiveAisle(sec.name);
                         }
+                        setShowDedicatedProductsPage(true);
+                        setDedicatedViewMode("pasillo");
                         setMobileNavDrawerOpen(false);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
                       className={`w-full text-left px-3.5 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-between ${
                         isActive ? "bg-[#ffd025] text-black" : "text-gray-300 hover:bg-white/5"
@@ -2523,7 +2563,10 @@ export default function Storefront() {
                           setActiveCategory("");
                           setActiveAisle(item.name);
                         }
+                        setShowDedicatedProductsPage(true);
+                        setDedicatedViewMode("pasillo");
                         setShowAisleMenu(false);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
                       className={`text-[10.5px] sm:text-xs uppercase tracking-wider transition-colors whitespace-nowrap shrink-0 py-0.5 ${
                         isActive
@@ -2925,7 +2968,7 @@ export default function Storefront() {
                         ? (settings.opportunitiesBannerImage || "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=1600&auto=format&fit=crop&q=80")
                         : dedicatedViewMode === "packs"
                         ? (settings.packsBannerImage || "https://images.unsplash.com/photo-1543007630-9710e4a00a20?w=1600&auto=format&fit=crop&q=80")
-                        : (settings.aislesBannerImage || "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80")
+                        : getAisleBannerImage(activeAisle, activeAisle ? aislesData.find((a) => a.name.toLowerCase() === activeAisle.toLowerCase())?.bannerImage : settings.aislesBannerImage)
                     }
                     alt={
                       dedicatedViewMode === "oportunidades"
@@ -2938,55 +2981,6 @@ export default function Storefront() {
                     decoding="async"
                     className="w-full h-full object-cover rounded-none"
                   />
-                </div>
-
-                {/* Menú de Pasillos en Texto Suelto (Sin Cajas ni Rectángulos, Solo Color al Seleccionar) */}
-                <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto no-scrollbar scrollbar-none py-2 mb-6 border-b border-white/10">
-                  <button
-                    onClick={() => {
-                      setActiveAisle("");
-                      setActiveCategory("");
-                    }}
-                    className={`text-xs sm:text-sm uppercase tracking-wider whitespace-nowrap transition-colors bg-transparent border-0 p-0 cursor-pointer ${
-                      !activeAisle && !activeCategory
-                        ? "text-[#ffd025] font-black"
-                        : "text-gray-400 hover:text-white font-medium"
-                    }`}
-                  >
-                    Todos
-                  </button>
-                  {(aisles.length > 0 ? aisles : categories)
-                    .filter((item) => {
-                      const isAisle = aisles.includes(item);
-                      const count = baseProducts.filter((p) =>
-                        isAisle ? p.aisle === item : p.category === item
-                      ).length;
-                      return count > 0;
-                    })
-                    .map((item) => {
-                      const isSel = activeAisle === item || activeCategory === item;
-                      return (
-                        <button
-                          key={item}
-                          onClick={() => {
-                            if (aisles.includes(item)) {
-                              setActiveCategory("");
-                              setActiveAisle(item);
-                            } else {
-                              setActiveAisle("");
-                              setActiveCategory(item);
-                            }
-                          }}
-                          className={`text-xs sm:text-sm uppercase tracking-wider whitespace-nowrap transition-colors bg-transparent border-0 p-0 cursor-pointer ${
-                            isSel
-                              ? "text-[#ffd025] font-black"
-                              : "text-gray-400 hover:text-white font-medium"
-                          }`}
-                        >
-                          {item}
-                        </button>
-                      );
-                    })}
                 </div>
 
                 {/* Vista Dedicada de Productos segun Modo */}
@@ -3058,8 +3052,8 @@ export default function Storefront() {
 
                   return (
                     <div className="space-y-6 mb-12">
-                      {/* BARRA DE FILTROS & ORDENAMIENTO EN PESTAÑA DEDICADA */}
-                      <div className="bg-[#141420]/90 backdrop-blur-md p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-white/10 flex items-center justify-between gap-2 sm:gap-3 shadow-xl">
+                      {/* BARRA DE FILTROS & ORDENAMIENTO EN PESTAÑA DEDICADA (Sin caja, divididos por líneas) */}
+                      <div className="flex items-center justify-between gap-3 sm:gap-4 py-3 border-y border-white/10 my-4">
                         {/* Buscador de filtro en tiempo real */}
                         <div className="flex-1 min-w-0 relative">
                           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -3068,7 +3062,7 @@ export default function Storefront() {
                             value={dedicatedSearchQuery}
                             onChange={(e) => setDedicatedSearchQuery(e.target.value)}
                             placeholder="Buscar productos..."
-                            className="w-full bg-[#1c1c2a] border border-white/10 rounded-lg sm:rounded-xl pl-8 sm:pl-9 pr-7 sm:pr-8 py-1.5 sm:py-2 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
+                            className="w-full bg-[#141422] border border-white/10 rounded-xl pl-8 sm:pl-9 pr-7 sm:pr-8 py-1.5 sm:py-2 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
                           />
                           {dedicatedSearchQuery && (
                             <button
@@ -3081,46 +3075,54 @@ export default function Storefront() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        {/* Línea divisoria vertical */}
+                        <div className="h-6 w-px bg-white/15 shrink-0" />
+
+                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                           {/* Filtro por Subcategoría / Etiqueta */}
                           {availableSubcats.length > 0 && (
-                            <div className="relative">
-                              {/* Versión Celular: Solo icono compacto con select nativo invisible superpuesto */}
-                              <div className="sm:hidden relative flex items-center justify-center w-8 h-8 rounded-lg bg-[#1c1c2a] border border-white/15 text-[#ffd025] hover:bg-[#252538] transition-colors" title="Filtrar por subcategoría">
-                                <Layers size={15} />
-                                <select
-                                  value={dedicatedSubcatFilter}
-                                  onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
-                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-black"
-                                  aria-label="Filtrar por subcategoría"
-                                >
-                                  <option value="all">Todas las subcategorías</option>
-                                  {availableSubcats.map((sub) => (
-                                    <option key={sub} value={sub}>{sub}</option>
-                                  ))}
-                                </select>
+                            <>
+                              <div className="relative">
+                                {/* Versión Celular: Icono compacto con select nativo */}
+                                <div className="sm:hidden relative flex items-center justify-center w-8 h-8 rounded-lg bg-[#141422] border border-white/15 text-[#ffd025]" title="Filtrar por subcategoría">
+                                  <Layers size={15} />
+                                  <select
+                                    value={dedicatedSubcatFilter}
+                                    onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-black"
+                                    aria-label="Filtrar por subcategoría"
+                                  >
+                                    <option value="all">Todas las subcategorías</option>
+                                    {availableSubcats.map((sub) => (
+                                      <option key={sub} value={sub}>{sub}</option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Versión PC: Select completo */}
+                                <div className="hidden sm:block">
+                                  <select
+                                    value={dedicatedSubcatFilter}
+                                    onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
+                                    className="bg-[#141422] border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-semibold focus:border-[#ffd025] focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="all">Todas las subcategorías</option>
+                                    {availableSubcats.map((sub) => (
+                                      <option key={sub} value={sub}>{sub}</option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
 
-                              {/* Versión PC: Select completo con texto */}
-                              <div className="hidden sm:block">
-                                <select
-                                  value={dedicatedSubcatFilter}
-                                  onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
-                                  className="bg-[#1c1c2a] border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-semibold focus:border-[#ffd025] focus:outline-none cursor-pointer"
-                                >
-                                  <option value="all">Todas las subcategorías</option>
-                                  {availableSubcats.map((sub) => (
-                                    <option key={sub} value={sub}>{sub}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
+                              {/* Línea divisoria vertical */}
+                              <div className="h-6 w-px bg-white/15 shrink-0" />
+                            </>
                           )}
 
                           {/* Menú de Ordenamiento */}
                           <div className="relative">
-                            {/* Versión Celular: Solo icono compacto con select nativo invisible superpuesto */}
-                            <div className="sm:hidden relative flex items-center justify-center w-8 h-8 rounded-lg bg-[#1c1c2a] border border-white/15 text-[#ffd025] hover:bg-[#252538] transition-colors" title="Ordenar productos">
+                            {/* Versión Celular: Icono compacto con select nativo */}
+                            <div className="sm:hidden relative flex items-center justify-center w-8 h-8 rounded-lg bg-[#141422] border border-white/15 text-[#ffd025]" title="Ordenar productos">
                               <Filter size={15} />
                               <select
                                 value={dedicatedSortBy}
@@ -3137,7 +3139,7 @@ export default function Storefront() {
                             </div>
 
                             {/* Versión PC: Selector con texto e icono */}
-                            <div className="hidden sm:flex items-center gap-1.5 bg-[#1c1c2a] border border-white/10 rounded-xl px-2.5 py-1.5 shrink-0">
+                            <div className="hidden sm:flex items-center gap-1.5 bg-[#141422] border border-white/10 rounded-xl px-2.5 py-1.5 shrink-0">
                               <Filter size={13} className="text-[#ffd025]" />
                               <select
                                 value={dedicatedSortBy}
@@ -3444,20 +3446,6 @@ export default function Storefront() {
                                 </div>
                               ))}
                             </div>
-
-                            <div className="w-full flex justify-end mt-3">
-                              <button
-                                onClick={() => {
-                                  setShowDedicatedProductsPage(true);
-                                  setDedicatedViewMode("oportunidades");
-                                  window.scrollTo({ top: 0, behavior: "smooth" });
-                                }}
-                                className="text-[10.5px] sm:text-xs font-semibold text-gray-400 hover:text-[#ffd025] uppercase tracking-wider transition-colors flex items-center gap-0.5 cursor-pointer"
-                              >
-                                <span>Ver más ofertas</span>
-                                <ChevronRight size={13} />
-                              </button>
-                            </div>
                           </div>
                         );
                       })()}
@@ -3467,6 +3455,11 @@ export default function Storefront() {
 
                 const showCollections = baseProducts.length > 0 || homeCollectionProducts.length > 0;
 
+                const selectedAisleObj = activeAisle ? aislesData.find((a) => a.name.toLowerCase() === activeAisle.toLowerCase()) : null;
+                const currentAisleBanner = activeAisle
+                  ? getAisleBannerImage(activeAisle, selectedAisleObj?.bannerImage)
+                  : (settings.aislesBannerImage || "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80");
+
                 const collectionsSection = !showCollections ? null : (
                   <section className="w-full mb-6 sm:mb-8">
                     <div className="w-full px-3 sm:px-6 md:px-8 mb-3 sm:mb-4 flex items-center gap-3 sm:gap-4">
@@ -3475,20 +3468,47 @@ export default function Storefront() {
                         #NUESTRASCOLECCIONES
                       </span>
                       <div className="flex-1 h-px bg-gradient-to-l from-transparent via-white/20 to-white/20" />
+                      <button
+                        onClick={() => {
+                          setShowDedicatedProductsPage(true);
+                          setDedicatedViewMode("catalog");
+                          setActiveAisle("");
+                          setActiveCategory("");
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="text-[10.5px] sm:text-xs font-semibold text-gray-400 hover:text-[#ffd025] uppercase tracking-wider transition-colors flex items-center gap-0.5 cursor-pointer shrink-0"
+                      >
+                        <span>Ver más</span>
+                        <ChevronRight size={13} />
+                      </button>
                     </div>
 
                     <div className="w-full px-3 sm:px-6 md:px-8">
-                      <div className="w-full h-16 sm:h-28 md:h-48 lg:h-60 xl:h-72 overflow-hidden rounded-none border border-white/10 mb-5 sm:mb-6 bg-black select-none">
-                        <img
-                          src={settings.aislesBannerImage || "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80"}
-                          alt="Pasillos"
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-full object-cover rounded-none"
-                        />
+                      <div className="w-full h-16 sm:h-28 md:h-48 lg:h-60 xl:h-72 overflow-hidden rounded-none border border-white/10 mb-3 sm:mb-4 bg-black select-none relative">
+                        <AnimatePresence mode="wait">
+                          <motion.img
+                            key={currentAisleBanner}
+                            src={currentAisleBanner}
+                            alt={activeAisle ? `Pasillo ${activeAisle}` : "Pasillos"}
+                            initial={{ opacity: 0.3 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0.3 }}
+                            transition={{ duration: 0.3 }}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover rounded-none"
+                          />
+                        </AnimatePresence>
+                        {activeAisle && (
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3 sm:p-4">
+                            <span className="text-[#ffd025] font-black text-xs sm:text-base uppercase tracking-wider drop-shadow">
+                              Pasillo: {activeAisle}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* DESGLOSE POR PASILLO LIMPIO Y DISCRETO CON 'VER MÁS' */}
+                      {/* DESGLOSE POR PASILLO */}
                       <div className="space-y-6 sm:space-y-8">
                         {activeAisles.map((aisleName) => {
                           const rawAisleProducts = groupedByAisle[aisleName] || [];
@@ -3497,27 +3517,6 @@ export default function Storefront() {
 
                           return (
                             <div key={aisleName} id={`aisle-${normalize(aisleName)}`} className="scroll-mt-24">
-                              {/* LÍNEA DE ENCABEZADO MINIMALISTA */}
-                              <div className="flex items-center justify-between pb-1.5 mb-2.5 border-b border-white/10">
-                                <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">
-                                  {aisleName}
-                                </span>
-                                <button
-                                  onClick={() => {
-                                    setActiveAisle(aisleName);
-                                    setActiveCategory("");
-                                    setNavQuickFilter("");
-                                    setShowDedicatedProductsPage(true);
-                                    setDedicatedViewMode("pasillo");
-                                    window.scrollTo({ top: 0, behavior: "smooth" });
-                                  }}
-                                  className="text-[10.5px] sm:text-xs font-semibold text-gray-400 hover:text-[#ffd025] uppercase tracking-wider transition-colors flex items-center gap-0.5 cursor-pointer"
-                                >
-                                  <span>Ver más</span>
-                                  <ChevronRight size={13} />
-                                </button>
-                              </div>
-
                               {/* GRILLA DE PRODUCTOS DEL PASILLO */}
                               <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 gap-x-2.5 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
                                 {aisleProducts.map((product) => (
@@ -3620,11 +3619,38 @@ export default function Storefront() {
                   </section>
                 );
 
+                // En estado inicial (Home, sin filtro de pasillo): #NUESTROSRECOMENDADOS siempre va PRIMERO, #NUESTRASCOLECCIONES SEGUNDO.
+                // Al hacer clic en un pasillo específico: se intercambian de lugar animadamente de arriba a abajo.
+                const sectionsOrder = isFiltered
+                  ? ["collections", "recommended"]
+                  : ["recommended", "collections"];
+
                 return (
-                  <>
-                    {collectionsSection}
-                    {recommendedSection}
-                  </>
+                  <div className="w-full space-y-6 sm:space-y-8">
+                    <AnimatePresence mode="popLayout">
+                      {sectionsOrder.map((sectionKey) => {
+                        const content = sectionKey === "recommended" ? recommendedSection : collectionsSection;
+                        if (!content) return null;
+                        return (
+                          <motion.div
+                            key={sectionKey}
+                            layout
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -15 }}
+                            transition={{
+                              type: "spring",
+                              stiffness: 280,
+                              damping: 28,
+                              mass: 0.8,
+                            }}
+                          >
+                            {content}
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </div>
                 );
               })()}
 
@@ -8036,399 +8062,491 @@ export default function Storefront() {
 
                   {/* Collapsible Step-by-Step Product Wizard (Añadir / Editar) */}
                   {(() => {
-                    const renderWizardBlock = (inlineProduct?: Product) => (
-                      <div className={`bg-[#12121e]/98 backdrop-blur-2xl rounded-3xl border-2 ${inlineProduct ? "border-[#ffd025] ring-4 ring-[#ffd025]/20 my-3" : "border-[#ffd025]/40"} p-5 sm:p-7 shadow-2xl shadow-black/90 space-y-6 animate-fade-in text-left`}>
-                        {/* Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-                          <div>
-                            <div className="flex items-center gap-2 text-xs font-bold text-[#ffd025] uppercase tracking-wider mb-1">
-                              <Sparkles size={14} /> {inlineProduct ? "Editor de Producto (Todo en Una Pantalla)" : "Formulario de Producto"}
+                    const renderWizardBlock = (inlineProduct?: Product) => {
+                      const isMainOpen = productFormSubTab === "all" || productFormSubTab === "main" || openProductFormSections.main;
+                      const isMediaOpen = productFormSubTab === "all" || productFormSubTab === "media" || openProductFormSections.media;
+                      const isExtrasOpen = productFormSubTab === "all" || productFormSubTab === "extras" || openProductFormSections.extras;
+
+                      const activeExtrasCount = [
+                        formState.oferta,
+                        formState.contingencyEnabled,
+                        formState.depositoEnabled,
+                        formState.transferenciaEnabled,
+                      ].filter(Boolean).length;
+
+                      return (
+                        <div className={`bg-[#12121e]/98 backdrop-blur-2xl rounded-3xl border-2 ${inlineProduct ? "border-[#ffd025] ring-4 ring-[#ffd025]/20 my-3" : "border-[#ffd025]/40"} p-4 sm:p-6 shadow-2xl shadow-black/90 space-y-4 animate-fade-in text-left`}>
+                          {/* Header Compacto */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                            <div>
+                              <div className="flex items-center gap-2 text-[11px] font-bold text-[#ffd025] uppercase tracking-wider mb-0.5">
+                                <Sparkles size={13} /> Editor Compacto de Productos
+                              </div>
+                              <h3 className="text-base sm:text-lg font-black text-white uppercase flex items-center gap-2">
+                                {inlineProduct
+                                  ? `✏️ Editando: ${formState.name || inlineProduct.name}`
+                                  : "✨ Añadir Nuevo Producto"}
+                              </h3>
                             </div>
-                            <h3 className="text-lg sm:text-xl font-black text-white uppercase">
-                              {inlineProduct
-                                ? `✏️ Editando: ${formState.name || inlineProduct.name}`
-                                : "✨ Añadir Nuevo Producto"}
-                            </h3>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {inlineProduct
-                                ? "Todos los campos disponibles en una sola ventana para edición rápida y sin interrupciones."
-                                : "Ingresa los datos para publicar el nuevo producto inmediatamente en el catálogo."}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={cancelEditing}
-                            className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-xs font-bold transition-colors flex items-center gap-2 border border-white/10 self-start sm:self-auto cursor-pointer"
-                          >
-                            <X size={15} /> Plegar / Cancelar
-                          </button>
-                        </div>
-
-                        {/* Formulario Todo en Una Sola Pantalla */}
-                        <form onSubmit={saveProduct} className="space-y-6">
-                          {/* 1. INFORMACIÓN PRINCIPAL */}
-                          <div className="p-4 sm:p-5 rounded-2xl bg-[#181826] border border-white/10 space-y-4">
-                            <h4 className="text-xs font-black uppercase tracking-wider text-[#ffd025] flex items-center gap-1.5 pb-2 border-b border-white/5">
-                              📌 1. Información Principal
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div className="md:col-span-2 space-y-1.5">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
-                                  Nombre del Producto *
-                                </label>
-                                <input
-                                  required
-                                  type="text"
-                                  placeholder="Ej: Cerveza Austral Calafate 6x330ml..."
-                                  value={formState.name}
-                                  onChange={(e) => setFormState({ ...formState, name: e.target.value })}
-                                  className="w-full bg-[#12121d] border border-white/10 rounded-xl p-3 text-white text-sm focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
-                                />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
-                                  Precio de Venta ($ CLP) *
-                                </label>
-                                <input
-                                  required
-                                  type="number"
-                                  min="0"
-                                  placeholder="Ej: 12990"
-                                  value={formState.price}
-                                  onChange={(e) => setFormState({ ...formState, price: e.target.value })}
-                                  className="w-full bg-[#12121d] border border-white/10 rounded-xl p-3 text-[#ffd025] font-black text-sm focus:border-[#ffd025] focus:outline-none"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <div className="space-y-1.5">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
-                                  Categoría Principal *
-                                </label>
-                                <select
-                                  required
-                                  value={formState.category}
-                                  onChange={(e) => setFormState({ ...formState, category: e.target.value })}
-                                  className="w-full bg-[#12121d] border border-white/10 rounded-xl p-3 text-white text-xs sm:text-sm focus:border-[#ffd025] focus:outline-none"
-                                >
-                                  <option value="">Seleccionar Categoría...</option>
-                                  {categories.map((c) => (
-                                    <option key={c} value={c}>
-                                      {c}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div className="space-y-1.5">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
-                                  Pasillo Separador *
-                                </label>
-                                <select
-                                  required
-                                  value={formState.aisle}
-                                  onChange={(e) => setFormState({ ...formState, aisle: e.target.value })}
-                                  className="w-full bg-[#12121d] border border-white/10 rounded-xl p-3 text-white text-xs sm:text-sm focus:border-[#ffd025] focus:outline-none"
-                                >
-                                  <option value="">Seleccionar Pasillo...</option>
-                                  {aisles.map((a) => (
-                                    <option key={a} value={a}>
-                                      {a}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div className="space-y-1.5">
-                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
-                                  Subcategoría / Tag (Opcional)
-                                </label>
-                                <select
-                                  value={formState.subcategory}
-                                  onChange={(e) => setFormState({ ...formState, subcategory: e.target.value })}
-                                  className="w-full bg-[#12121d] border border-white/10 rounded-xl p-3 text-white text-xs sm:text-sm focus:border-[#ffd025] focus:outline-none"
-                                >
-                                  <option value="">Sin subcategoría...</option>
-                                  {subcategories.map((s) => (
-                                    <option key={s} value={s}>
-                                      {s}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* 2. MULTIMEDIA Y VARIANTES */}
-                          <div className="p-4 sm:p-5 rounded-2xl bg-[#181826] border border-white/10 space-y-4">
-                            <h4 className="text-xs font-black uppercase tracking-wider text-[#ffd025] flex items-center gap-1.5 pb-2 border-b border-white/5">
-                              🖼️ 2. Imagen y Variantes
-                            </h4>
-
-                            <div className="flex flex-col sm:flex-row gap-4 items-center">
-                              <div className="relative w-20 h-20 rounded-2xl bg-[#12121d] border border-white/10 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                                {formState.image ? (
-                                  <img
-                                    src={formState.image}
-                                    alt="Preview"
-                                    className="w-full h-full object-contain p-1"
-                                    onError={(e) => {
-                                      (e.currentTarget as HTMLImageElement).style.display = "none";
-                                    }}
-                                  />
-                                ) : (
-                                  <div className="text-center p-2 text-gray-500">
-                                    <Package size={22} className="mx-auto mb-0.5 opacity-50" />
-                                    <span className="text-[8px] uppercase font-bold">Sin foto</span>
-                                  </div>
-                                )}
-                                {formState.image && (
-                                  <span
-                                    className={`absolute bottom-1 right-1 p-1 rounded-full text-white text-[9px] shadow ${
-                                      formState.image.includes("/storage/objects/") ? "bg-emerald-600" : "bg-blue-600"
-                                    }`}
-                                  >
-                                    {formState.image.includes("/storage/objects/") ? <HardDriveUpload size={10} /> : <Link2 size={10} />}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex-1 w-full space-y-2">
-                                <div className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    placeholder="Pegar link de imagen externa (https://...)"
-                                    value={formState.image.includes("/storage/objects/") ? "" : formState.image}
-                                    onChange={(e) => setFormState({ ...formState, image: e.target.value })}
-                                    onBlur={(e) =>
-                                      resolveImageUrl(e.target.value, (resolved) =>
-                                        setFormState((prev) => ({ ...prev, image: resolved })),
-                                      )
-                                    }
-                                    className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-3 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
-                                  />
-                                  <label className="cursor-pointer px-4 py-3 bg-[#ffd025]/10 text-[#ffd025] hover:bg-[#ffd025] hover:text-[#141414] rounded-xl text-xs font-black text-center transition flex items-center gap-1.5 border border-[#ffd025]/20 shrink-0">
-                                    <Upload size={14} /> Subir Foto
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      onChange={(e) =>
-                                        handleImageUpload(e, (url) => setFormState({ ...formState, image: url }))
-                                      }
-                                    />
-                                  </label>
-                                  {formState.image && (
-                                    <button
-                                      type="button"
-                                      title="Eliminar foto"
-                                      onClick={() => {
-                                        if (formState.image.includes("/storage/objects/")) {
-                                          handleDeleteStorageImage(formState.image, () =>
-                                            setFormState({ ...formState, image: "" }),
-                                          );
-                                        } else {
-                                          setFormState({ ...formState, image: "" });
-                                        }
-                                      }}
-                                      className="px-3 py-3 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-xs font-black transition shrink-0 cursor-pointer"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-gray-500">
-                                  JPG, PNG o WebP. Se comprime automáticamente.
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="pt-2 border-t border-white/5 space-y-2">
-                              <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
-                                Opciones / Presentaciones (Opcional)
-                              </label>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <input
-                                  type="text"
-                                  placeholder="Título selector (ej: Sabor, Tamaño, Pack)"
-                                  value={formState.optionsTitle}
-                                  onChange={(e) => setFormState({ ...formState, optionsTitle: e.target.value })}
-                                  className="bg-[#12121d] border border-white/10 rounded-xl p-3 text-white text-xs focus:border-[#ffd025] focus:outline-none"
-                                />
-                                <input
-                                  type="text"
-                                  placeholder="Opciones separadas por coma (ej: Lata 350ml, Botella 1L)"
-                                  value={formState.optionsString}
-                                  onChange={(e) => setFormState({ ...formState, optionsString: e.target.value })}
-                                  className="bg-[#12121d] border border-white/10 rounded-xl p-3 text-white text-xs focus:border-[#ffd025] focus:outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* 3. ATRIBUTOS Y EXTRAS */}
-                          <div className="p-4 sm:p-5 rounded-2xl bg-[#181826] border border-white/10 space-y-4">
-                            <h4 className="text-xs font-black uppercase tracking-wider text-[#ffd025] flex items-center gap-1.5 pb-2 border-b border-white/5">
-                              ⚡ 3. Atributos Especiales & Extras
-                            </h4>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              {/* Oferta Toggle */}
-                              <div
-                                onClick={() => setFormState({ ...formState, oferta: !formState.oferta })}
-                                className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                                  formState.oferta
-                                    ? "bg-gradient-to-r from-pink-600/25 to-yellow-500/15 border-pink-500 text-white"
-                                    : "bg-[#12121d] border-white/10 text-gray-400 hover:border-white/20"
-                                }`}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allOpen = openProductFormSections.main && openProductFormSections.media && openProductFormSections.extras;
+                                  const nextState = !allOpen;
+                                  setOpenProductFormSections({ main: nextState, media: nextState, extras: nextState });
+                                  setProductFormSubTab(nextState ? "all" : "main");
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-bold transition-colors border border-white/10 flex items-center gap-1.5 cursor-pointer"
                               >
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
-                                    🏷️ Producto en Oferta
-                                  </span>
-                                  <span
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                      formState.oferta ? "bg-pink-500 border-pink-500 text-white" : "border-gray-600"
-                                    }`}
-                                  >
-                                    {formState.oferta && <span className="text-[10px]">✓</span>}
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-gray-400">
-                                  Destaca este producto con etiqueta de oferta.
-                                </p>
-                              </div>
-
-                              {/* Contingencia Toggle */}
-                              <div
-                                onClick={() =>
-                                  setFormState({ ...formState, contingencyEnabled: !formState.contingencyEnabled })
-                                }
-                                className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                                  formState.contingencyEnabled
-                                    ? "bg-gradient-to-r from-amber-600/25 to-orange-500/15 border-amber-500 text-white"
-                                    : "bg-[#12121d] border-white/10 text-gray-400 hover:border-white/20"
-                                }`}
+                                <Layers size={13} />
+                                <span>{(openProductFormSections.main && openProductFormSections.media && openProductFormSections.extras) ? "Plegar Secciones" : "Desplegar Todo"}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEditing}
+                                className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-bold transition-colors border border-red-500/20 flex items-center gap-1 cursor-pointer"
                               >
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
-                                    ⚡ Catálogo de Contingencia
-                                  </span>
-                                  <span
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                      formState.contingencyEnabled ? "bg-amber-500 border-amber-500 text-white" : "border-gray-600"
-                                    }`}
-                                  >
-                                    {formState.contingencyEnabled && <span className="text-[10px]">✓</span>}
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-gray-400">
-                                  Visibilidad en Modo Contingencia.
-                                </p>
-                              </div>
-
-                              {/* Retornable / Seña Toggle */}
-                              <div className="p-3.5 rounded-2xl bg-[#12121d] border border-white/10 space-y-2">
-                                <div
-                                  onClick={() =>
-                                    setFormState({ ...formState, depositoEnabled: !formState.depositoEnabled })
-                                  }
-                                  className="flex items-center justify-between cursor-pointer"
-                                >
-                                  <div>
-                                    <span className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
-                                      🍾 Envase Retornable (Seña)
-                                    </span>
-                                    <p className="text-[10px] text-gray-400">Garantía por envase.</p>
-                                  </div>
-                                  <span
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                      formState.depositoEnabled ? "bg-cyan-500 border-cyan-500 text-white" : "border-gray-600"
-                                    }`}
-                                  >
-                                    {formState.depositoEnabled && <span className="text-[10px]">✓</span>}
-                                  </span>
-                                </div>
-                                {formState.depositoEnabled && (
-                                  <div className="flex items-center gap-2 pt-2 border-t border-white/5 animate-fade-in">
-                                    <label className="text-xs font-bold text-cyan-400">Valor Seña ($):</label>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={formState.depositoAmount}
-                                      onChange={(e) => setFormState({ ...formState, depositoAmount: e.target.value })}
-                                      className="flex-1 bg-[#181826] border border-cyan-500/50 rounded-lg px-2.5 py-1 text-white text-xs focus:border-cyan-400 focus:outline-none"
-                                      placeholder="500"
-                                    />
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Transferencia Fee Toggle */}
-                              <div className="p-3.5 rounded-2xl bg-[#12121d] border border-white/10 space-y-2">
-                                <div
-                                  onClick={() =>
-                                    setFormState({
-                                      ...formState,
-                                      transferenciaEnabled: !formState.transferenciaEnabled,
-                                    })
-                                  }
-                                  className="flex items-center justify-between cursor-pointer"
-                                >
-                                  <div>
-                                    <span className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
-                                      💳 Cargo Extra Transferencia
-                                    </span>
-                                    <p className="text-[10px] text-gray-400">Recargo por pago.</p>
-                                  </div>
-                                  <span
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                      formState.transferenciaEnabled ? "bg-blue-500 border-blue-500 text-white" : "border-gray-600"
-                                    }`}
-                                  >
-                                    {formState.transferenciaEnabled && <span className="text-[10px]">✓</span>}
-                                  </span>
-                                </div>
-                                {formState.transferenciaEnabled && (
-                                  <div className="flex items-center gap-2 pt-2 border-t border-white/5 animate-fade-in">
-                                    <label className="text-xs font-bold text-blue-400">Recargo ($):</label>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={formState.transferenciaAmount}
-                                      onChange={(e) =>
-                                        setFormState({ ...formState, transferenciaAmount: e.target.value })
-                                      }
-                                      className="flex-1 bg-[#181826] border border-blue-500/50 rounded-lg px-2.5 py-1 text-white text-xs focus:border-blue-400 focus:outline-none"
-                                      placeholder="0"
-                                    />
-                                  </div>
-                                )}
-                              </div>
+                                <X size={14} /> Cerrar
+                              </button>
                             </div>
                           </div>
 
-                          {/* BOTONES DE ACCIÓN UNIFICADOS */}
-                          <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-white/10">
+                          {/* Sub-Tabs Selector Selector Rápido */}
+                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
                             <button
                               type="button"
-                              onClick={cancelEditing}
-                              className="w-full sm:w-auto px-6 py-3.5 rounded-xl border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer"
+                              onClick={() => {
+                                setProductFormSubTab("main");
+                                setOpenProductFormSections((p) => ({ ...p, main: true }));
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border ${
+                                productFormSubTab === "main"
+                                  ? "bg-[#ffd025] text-black border-[#ffd025]"
+                                  : "bg-[#181826] text-gray-300 border-white/10 hover:border-white/20"
+                              }`}
                             >
-                              Plegar / Cancelar
+                              <span>📌 1. Datos Principales</span>
                             </button>
+
                             <button
-                              type="submit"
-                              className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-xl font-black uppercase text-xs tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all shadow-xl shadow-[#ffd025]/20 flex items-center justify-center gap-2 cursor-pointer"
+                              type="button"
+                              onClick={() => {
+                                setProductFormSubTab("media");
+                                setOpenProductFormSections((p) => ({ ...p, media: true }));
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border ${
+                                productFormSubTab === "media"
+                                  ? "bg-[#ffd025] text-black border-[#ffd025]"
+                                  : "bg-[#181826] text-gray-300 border-white/10 hover:border-white/20"
+                              }`}
                             >
-                              <CheckCircle size={16} />
-                              {inlineProduct ? "Guardar Cambios del Producto" : "Crear y Publicar Producto"}
+                              <span>🖼️ 2. Imagen & Opciones</span>
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${formState.image ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-gray-400"}`}>
+                                {formState.image ? "Con Foto" : "Sin Foto"}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProductFormSubTab("extras");
+                                setOpenProductFormSections((p) => ({ ...p, extras: true }));
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border ${
+                                productFormSubTab === "extras"
+                                  ? "bg-[#ffd025] text-black border-[#ffd025]"
+                                  : "bg-[#181826] text-gray-300 border-white/10 hover:border-white/20"
+                              }`}
+                            >
+                              <span>⚡ 3. Extras & Toggles</span>
+                              {activeExtrasCount > 0 && (
+                                <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-amber-500/20 text-amber-300">
+                                  {activeExtrasCount} activos
+                                </span>
+                              )}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setProductFormSubTab("all");
+                                setOpenProductFormSections({ main: true, media: true, extras: true });
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border ${
+                                productFormSubTab === "all"
+                                  ? "bg-white/20 text-white border-white/30"
+                                  : "bg-white/5 text-gray-400 border-white/5 hover:text-white"
+                              }`}
+                            >
+                              📑 Ver Todo
                             </button>
                           </div>
-                        </form>
-                      </div>
-                    );
+
+                          {/* Formulario con Secciones Plegables Accordion */}
+                          <form onSubmit={saveProduct} className="space-y-3">
+                            {/* 1. INFORMACIÓN PRINCIPAL (Accordeón Plegable) */}
+                            <div className="rounded-2xl bg-[#181826] border border-white/10 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenProductFormSections((p) => ({ ...p, main: !p.main }))
+                                }
+                                className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black uppercase text-[#ffd025]">📌 1. Información Principal</span>
+                                  {formState.name && (
+                                    <span className="text-[10px] text-gray-400 font-bold truncate max-w-[200px]">
+                                      — {formState.name} (${Number(formState.price || 0).toLocaleString("es-CL")})
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-gray-400">
+                                  {isMainOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </div>
+                              </button>
+
+                              {isMainOpen && (
+                                <div className="p-4 pt-0 border-t border-white/5 space-y-3 animate-fade-in mt-3">
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div className="md:col-span-2 space-y-1">
+                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                        Nombre del Producto *
+                                      </label>
+                                      <input
+                                        required
+                                        type="text"
+                                        placeholder="Ej: Cerveza Austral Calafate 6x330ml..."
+                                        value={formState.name}
+                                        onChange={(e) => setFormState({ ...formState, name: e.target.value })}
+                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                        Precio de Venta ($ CLP) *
+                                      </label>
+                                      <input
+                                        required
+                                        type="number"
+                                        min="0"
+                                        placeholder="Ej: 12990"
+                                        value={formState.price}
+                                        onChange={(e) => setFormState({ ...formState, price: e.target.value })}
+                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-[#ffd025] font-black text-xs focus:border-[#ffd025] focus:outline-none"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="space-y-1">
+                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                        Categoría Principal *
+                                      </label>
+                                      <select
+                                        required
+                                        value={formState.category}
+                                        onChange={(e) => setFormState({ ...formState, category: e.target.value })}
+                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                      >
+                                        <option value="">Seleccionar Categoría...</option>
+                                        {categories.map((c) => (
+                                          <option key={c} value={c}>
+                                            {c}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                        Pasillo Separador *
+                                      </label>
+                                      <select
+                                        required
+                                        value={formState.aisle}
+                                        onChange={(e) => setFormState({ ...formState, aisle: e.target.value })}
+                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                      >
+                                        <option value="">Seleccionar Pasillo...</option>
+                                        {aisles.map((a) => (
+                                          <option key={a} value={a}>
+                                            {a}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                        Subcategoría / Tag (Opcional)
+                                      </label>
+                                      <select
+                                        value={formState.subcategory}
+                                        onChange={(e) => setFormState({ ...formState, subcategory: e.target.value })}
+                                        className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                      >
+                                        <option value="">Sin subcategoría...</option>
+                                        {subcategories.map((s) => (
+                                          <option key={s} value={s}>
+                                            {s}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 2. MULTIMEDIA Y VARIANTES (Accordeón Plegable) */}
+                            <div className="rounded-2xl bg-[#181826] border border-white/10 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenProductFormSections((p) => ({ ...p, media: !p.media }))
+                                }
+                                className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black uppercase text-[#ffd025]">🖼️ 2. Imagen & Opciones</span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded font-mono ${formState.image ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-gray-400"}`}>
+                                    {formState.image ? "Foto Cargada" : "Sin Foto"}
+                                  </span>
+                                </div>
+                                <div className="text-gray-400">
+                                  {isMediaOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </div>
+                              </button>
+
+                              {isMediaOpen && (
+                                <div className="p-4 pt-0 border-t border-white/5 space-y-3 animate-fade-in mt-3">
+                                  <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                    <div className="relative w-16 h-16 rounded-xl bg-[#12121d] border border-white/10 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                                      {formState.image ? (
+                                        <img
+                                          src={formState.image}
+                                          alt="Preview"
+                                          className="w-full h-full object-contain p-1"
+                                          onError={(e) => {
+                                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                                          }}
+                                        />
+                                      ) : (
+                                        <div className="text-center p-1 text-gray-500">
+                                          <Package size={18} className="mx-auto opacity-50" />
+                                          <span className="text-[8px] uppercase font-bold block">Sin foto</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="flex-1 w-full space-y-1.5">
+                                      <div className="flex gap-2">
+                                        <input
+                                          type="text"
+                                          placeholder="Pegar link de imagen externa (https://...)"
+                                          value={formState.image.includes("/storage/objects/") ? "" : formState.image}
+                                          onChange={(e) => setFormState({ ...formState, image: e.target.value })}
+                                          onBlur={(e) =>
+                                            resolveImageUrl(e.target.value, (resolved) =>
+                                              setFormState((prev) => ({ ...prev, image: resolved })),
+                                            )
+                                          }
+                                          className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
+                                        />
+                                        <label className="cursor-pointer px-3 py-2.5 bg-[#ffd025]/10 text-[#ffd025] hover:bg-[#ffd025] hover:text-[#141414] rounded-xl text-xs font-black text-center transition flex items-center gap-1 border border-[#ffd025]/20 shrink-0">
+                                          <Upload size={13} /> Subir
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) =>
+                                              handleImageUpload(e, (url) => setFormState({ ...formState, image: url }))
+                                            }
+                                          />
+                                        </label>
+                                        {formState.image && (
+                                          <button
+                                            type="button"
+                                            title="Eliminar foto"
+                                            onClick={() => {
+                                              if (formState.image.includes("/storage/objects/")) {
+                                                handleDeleteStorageImage(formState.image, () =>
+                                                  setFormState({ ...formState, image: "" }),
+                                                );
+                                              } else {
+                                                setFormState({ ...formState, image: "" });
+                                              }
+                                            }}
+                                            className="px-2.5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-xs font-black transition shrink-0 cursor-pointer"
+                                          >
+                                            <Trash2 size={13} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-2 border-t border-white/5 space-y-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                      Opciones / Presentaciones (Opcional)
+                                    </label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      <input
+                                        type="text"
+                                        placeholder="Título selector (ej: Sabor, Tamaños)"
+                                        value={formState.optionsTitle}
+                                        onChange={(e) => setFormState({ ...formState, optionsTitle: e.target.value })}
+                                        className="bg-[#12121d] border border-white/10 rounded-xl p-2 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                      />
+                                      <input
+                                        type="text"
+                                        placeholder="Opciones por coma (ej: Lata 350ml, Botella 1L)"
+                                        value={formState.optionsString}
+                                        onChange={(e) => setFormState({ ...formState, optionsString: e.target.value })}
+                                        className="bg-[#12121d] border border-white/10 rounded-xl p-2 text-white text-xs focus:border-[#ffd025] focus:outline-none"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 3. ATRIBUTOS Y EXTRAS (Accordeón Plegable) */}
+                            <div className="rounded-2xl bg-[#181826] border border-white/10 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenProductFormSections((p) => ({ ...p, extras: !p.extras }))
+                                }
+                                className="w-full p-3.5 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black uppercase text-[#ffd025]">⚡ 3. Atributos Especiales & Extras</span>
+                                  {activeExtrasCount > 0 && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300">
+                                      {activeExtrasCount} activos
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-gray-400">
+                                  {isExtrasOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </div>
+                              </button>
+
+                              {isExtrasOpen && (
+                                <div className="p-4 pt-0 border-t border-white/5 space-y-3 animate-fade-in mt-3">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* Oferta Toggle */}
+                                    <div
+                                      onClick={() => setFormState({ ...formState, oferta: !formState.oferta })}
+                                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                                        formState.oferta
+                                          ? "bg-pink-600/20 border-pink-500 text-white"
+                                          : "bg-[#12121d] border-white/10 text-gray-400 hover:border-white/20"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-bold text-xs text-white">🏷️ Producto en Oferta</span>
+                                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] ${formState.oferta ? "bg-pink-500 border-pink-500 text-white" : "border-gray-600"}`}>
+                                          {formState.oferta && "✓"}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Contingencia Toggle */}
+                                    <div
+                                      onClick={() => setFormState({ ...formState, contingencyEnabled: !formState.contingencyEnabled })}
+                                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                                        formState.contingencyEnabled
+                                          ? "bg-amber-600/20 border-amber-500 text-white"
+                                          : "bg-[#12121d] border-white/10 text-gray-400 hover:border-white/20"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-bold text-xs text-white">⚡ Modo Contingencia</span>
+                                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] ${formState.contingencyEnabled ? "bg-amber-500 border-amber-500 text-white" : "border-gray-600"}`}>
+                                          {formState.contingencyEnabled && "✓"}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Retornable Toggle */}
+                                    <div className="p-3 rounded-xl bg-[#12121d] border border-white/10 space-y-2">
+                                      <div
+                                        onClick={() => setFormState({ ...formState, depositoEnabled: !formState.depositoEnabled })}
+                                        className="flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span className="font-bold text-xs text-white">🍾 Envase Retornable</span>
+                                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] ${formState.depositoEnabled ? "bg-cyan-500 border-cyan-500 text-white" : "border-gray-600"}`}>
+                                          {formState.depositoEnabled && "✓"}
+                                        </span>
+                                      </div>
+                                      {formState.depositoEnabled && (
+                                        <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                                          <label className="text-[10px] font-bold text-cyan-400">Seña ($):</label>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={formState.depositoAmount}
+                                            onChange={(e) => setFormState({ ...formState, depositoAmount: e.target.value })}
+                                            className="flex-1 bg-[#181826] border border-cyan-500/50 rounded-lg px-2 py-0.5 text-white text-xs"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Transferencia Fee Toggle */}
+                                    <div className="p-3 rounded-xl bg-[#12121d] border border-white/10 space-y-2">
+                                      <div
+                                        onClick={() => setFormState({ ...formState, transferenciaEnabled: !formState.transferenciaEnabled })}
+                                        className="flex items-center justify-between cursor-pointer"
+                                      >
+                                        <span className="font-bold text-xs text-white">💳 Recargo Transferencia</span>
+                                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] ${formState.transferenciaEnabled ? "bg-blue-500 border-blue-500 text-white" : "border-gray-600"}`}>
+                                          {formState.transferenciaEnabled && "✓"}
+                                        </span>
+                                      </div>
+                                      {formState.transferenciaEnabled && (
+                                        <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                                          <label className="text-[10px] font-bold text-blue-400">Monto ($):</label>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={formState.transferenciaAmount}
+                                            onChange={(e) => setFormState({ ...formState, transferenciaAmount: e.target.value })}
+                                            className="flex-1 bg-[#181826] border border-blue-500/50 rounded-lg px-2 py-0.5 text-white text-xs"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Botones de Guardado Unificados Compactos */}
+                            <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+                              <button
+                                type="button"
+                                onClick={cancelEditing}
+                                className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-white/10 text-gray-300 hover:text-white hover:bg-white/5 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                Plegar / Cancelar
+                              </button>
+                              <button
+                                type="submit"
+                                className="w-full sm:w-auto px-7 py-2.5 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-xl font-black uppercase text-xs tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#ffd025]/20 flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <CheckCircle size={15} />
+                                {inlineProduct ? "Guardar Cambios" : "Crear Producto"}
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      );
+                    };
 
                     return (
                       <>

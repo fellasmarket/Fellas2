@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import { X } from "lucide-react";
+import React from "react";
 
 export interface GalleryImageItem {
   id: string;
@@ -47,8 +46,6 @@ export function StoreGallery({
   images = DEFAULT_GALLERY_IMAGES,
   tagText = "#LASPROMOSDELTIOFELLAS",
 }: StoreGalleryProps) {
-  const [selectedImage, setSelectedImage] = useState<GalleryImageItem | null>(null);
-
   // Asegurar exactamente 6 imágenes con formato 4:5
   const displayImages: GalleryImageItem[] = Array.from({ length: 6 }).map((_, index) => {
     return images[index] && images[index].url
@@ -75,8 +72,7 @@ export function StoreGallery({
         - 6 imágenes en PC (lg:grid-cols-6 / sm:grid-cols-3)
         - 2 imágenes en celular (grid-cols-2)
         - Relación de aspecto 4:5
-        - Animación de leve zoom suave en hover
-        - Solo imagen pura
+        - Solo imagen pura estática (sin lightbox ni clics)
       */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
         {displayImages.map((img, idx) => {
@@ -86,50 +82,21 @@ export function StoreGallery({
           return (
             <div
               key={img.id || idx}
-              onClick={() => setSelectedImage(img)}
-              className={`group relative aspect-[4/5] overflow-hidden bg-[#0d0d15] cursor-pointer select-none border border-white/5 hover:border-[#ffd025]/40 transition-colors ${
+              className={`group relative aspect-[4/5] overflow-hidden bg-[#0d0d15] cursor-default select-none border border-white/5 transition-colors ${
                 isHiddenOnMobile ? "hidden sm:block" : "block"
               }`}
             >
-              {/* Imagen con leve animación de zoom en hover */}
+              {/* Imagen con leve animación de zoom en hover opcional pero estática sin clic */}
               <img
                 src={img.url}
                 alt=""
                 loading="lazy"
-                className="w-full h-full object-cover object-center transform scale-100 group-hover:scale-108 transition-transform duration-500 ease-out"
+                className="w-full h-full object-cover object-center transform scale-100 group-hover:scale-105 transition-transform duration-500 ease-out"
               />
             </div>
           );
         })}
       </div>
-
-      {/* Modal Lightbox minimalista: solo la imagen ampliada en 4:5 sin bordes redondeados ni texto */}
-      {selectedImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-3 sm:p-6 animate-fade-in"
-          onClick={() => setSelectedImage(null)}
-        >
-          <div
-            className="relative max-w-md sm:max-w-lg w-full bg-black shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setSelectedImage(null)}
-              className="absolute top-2 right-2 z-10 w-8 h-8 bg-black/80 text-white flex items-center justify-center hover:bg-[#ffd025] hover:text-black transition-colors"
-              title="Cerrar"
-            >
-              <X size={18} />
-            </button>
-            <div className="relative aspect-[4/5] w-full bg-black">
-              <img
-                src={selectedImage.url}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
