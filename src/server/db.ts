@@ -4,6 +4,8 @@ import path from "path";
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "fellas_db.json");
 const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+const SEED_FILE = path.resolve(process.cwd(), "src", "server", "seed_db.json");
+const SEED_UPLOADS_DIR = path.resolve(process.cwd(), "src", "server", "seed_uploads");
 
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) {
@@ -11,6 +13,37 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+if (!fs.existsSync(SEED_UPLOADS_DIR)) {
+  fs.mkdirSync(SEED_UPLOADS_DIR, { recursive: true });
+}
+
+// Bi-directional sync of uploads on server startup (crucial for Render and fresh deploys)
+try {
+  if (fs.existsSync(SEED_UPLOADS_DIR)) {
+    const seedFiles = fs.readdirSync(SEED_UPLOADS_DIR);
+    for (const file of seedFiles) {
+      const dest = path.join(UPLOADS_DIR, file);
+      if (!fs.existsSync(dest)) {
+        try {
+          fs.copyFileSync(path.join(SEED_UPLOADS_DIR, file), dest);
+        } catch {}
+      }
+    }
+  }
+  if (fs.existsSync(UPLOADS_DIR)) {
+    const uploadFiles = fs.readdirSync(UPLOADS_DIR);
+    for (const file of uploadFiles) {
+      const dest = path.join(SEED_UPLOADS_DIR, file);
+      if (!fs.existsSync(dest)) {
+        try {
+          fs.copyFileSync(path.join(UPLOADS_DIR, file), dest);
+        } catch {}
+      }
+    }
+  }
+} catch (err) {
+  console.error("Error auto-syncing seed uploads:", err);
 }
 
 export interface Setting {
@@ -885,40 +918,69 @@ class DatabaseManager {
     this.db = this.load();
   }
 
+  private getSeedFallback(): DatabaseSchema {
+    try {
+      if (fs.existsSync(SEED_FILE)) {
+        const raw = fs.readFileSync(SEED_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+          return {
+            ...DEFAULT_DB,
+            ...parsed,
+            settings: { ...DEFAULT_DB.settings, ...(parsed.settings || {}) },
+          };
+        }
+      }
+    } catch (e) {
+      console.error("Error reading seed file:", e);
+    }
+    return DEFAULT_DB;
+  }
+
   private load(): DatabaseSchema {
+    const fallback = this.getSeedFallback();
     try {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         // Merge defaults in case new fields were added
         return {
-          ...DEFAULT_DB,
+          ...fallback,
           ...parsed,
-          settings: { ...DEFAULT_DB.settings, ...(parsed.settings || {}) },
-          categories: parsed.categories || DEFAULT_DB.categories,
-          aisles: parsed.aisles || DEFAULT_DB.aisles,
-          subcategories: parsed.subcategories || DEFAULT_DB.subcategories,
-          products: parsed.products || DEFAULT_DB.products,
-          orders: parsed.orders || DEFAULT_DB.orders,
-          deliveryLocations: parsed.deliveryLocations || DEFAULT_DB.deliveryLocations,
-          discounts: parsed.discounts || DEFAULT_DB.discounts,
-          customers: parsed.customers || DEFAULT_DB.customers,
-          savedCarts: parsed.savedCarts || DEFAULT_DB.savedCarts,
-          visits: parsed.visits || DEFAULT_DB.visits,
+          settings: { ...fallback.settings, ...(parsed.settings || {}) },
+          categories: parsed.categories?.length ? parsed.categories : fallback.categories,
+          aisles: parsed.aisles?.length ? parsed.aisles : fallback.aisles,
+          subcategories: parsed.subcategories?.length ? parsed.subcategories : fallback.subcategories,
+          products: parsed.products?.length ? parsed.products : fallback.products,
+          orders: parsed.orders ?? fallback.orders,
+          deliveryLocations: parsed.deliveryLocations?.length ? parsed.deliveryLocations : fallback.deliveryLocations,
+          discounts: parsed.discounts?.length ? parsed.discounts : fallback.discounts,
+          customers: parsed.customers ?? fallback.customers,
+          savedCarts: parsed.savedCarts ?? fallback.savedCarts,
+          visits: parsed.visits ?? fallback.visits,
         };
+      } else if (fs.existsSync(SEED_FILE)) {
+        const seedRaw = fs.readFileSync(SEED_FILE, "utf-8");
+        const seedParsed = JSON.parse(seedRaw);
+        this.saveImmediate(seedParsed);
+        return seedParsed;
       }
     } catch (err) {
       console.error("Error reading database file, resetting to defaults:", err);
     }
-    this.saveImmediate(DEFAULT_DB);
-    return JSON.parse(JSON.stringify(DEFAULT_DB));
+    this.saveImmediate(fallback);
+    return JSON.parse(JSON.stringify(fallback));
   }
 
-  private saveImmediate(data: DatabaseSchema) {
+  public saveImmediate(data: DatabaseSchema) {
     try {
       const tmp = `${DB_FILE}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf-8");
       fs.renameSync(tmp, DB_FILE);
+      // Auto-mirror to seed file in source so git commits preserve it automatically
+      try {
+        fs.writeFileSync(SEED_FILE, JSON.stringify(data, null, 2), "utf-8");
+      } catch {}
     } catch (err) {
       console.error("Failed to write database file:", err);
     }
@@ -929,6 +991,30 @@ class DatabaseManager {
     this.saveTimeout = setTimeout(() => {
       this.saveImmediate(this.db);
     }, 100);
+  }
+
+  public getRaw(): DatabaseSchema {
+    return JSON.parse(JSON.stringify(this.db));
+  }
+
+  public restoreRaw(data: Partial<DatabaseSchema>) {
+    const fallback = this.getSeedFallback();
+    this.db = {
+      ...fallback,
+      ...data,
+      settings: { ...fallback.settings, ...(data.settings || {}) },
+      categories: data.categories || fallback.categories,
+      aisles: data.aisles || fallback.aisles,
+      subcategories: data.subcategories || fallback.subcategories,
+      products: data.products || fallback.products,
+      orders: data.orders || fallback.orders,
+      deliveryLocations: data.deliveryLocations || fallback.deliveryLocations,
+      discounts: data.discounts || fallback.discounts,
+      customers: data.customers || fallback.customers,
+      savedCarts: data.savedCarts || fallback.savedCarts,
+      visits: data.visits || fallback.visits,
+    };
+    this.saveImmediate(this.db);
   }
 
   public getSettings(): Setting {

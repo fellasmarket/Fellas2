@@ -104,6 +104,7 @@ declare module "@workspace/api-client-react" {
   }
   interface Product {
     contingencyEnabled?: boolean;
+    description?: string;
   }
   interface ProductInput {
     contingencyEnabled?: boolean;
@@ -181,6 +182,11 @@ import {
   AlertTriangle,
   ExternalLink,
   Camera,
+  ShieldCheck,
+  Archive,
+  DownloadCloud,
+  UploadCloud,
+  Database,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { StoreGallery, DEFAULT_GALLERY_IMAGES, GalleryImageItem } from "@/components/store-gallery";
@@ -804,7 +810,7 @@ export default function Storefront() {
 
   // Admin Progressive Disclosure & Guided Steps State
   const [settingsSubTab, setSettingsSubTab] = useState<
-    "all" | "brand" | "ticker" | "banners" | "featured" | "delivery" | "hours" | "contingency" | "contact" | "gallery"
+    "all" | "brand" | "ticker" | "banners" | "featured" | "delivery" | "hours" | "contingency" | "contact" | "gallery" | "backup"
   >("all");
   const [openSettingsSections, setOpenSettingsSections] = useState<Record<string, boolean>>({
     brand: true,
@@ -816,6 +822,7 @@ export default function Storefront() {
     contingency: false,
     contact: false,
     gallery: false,
+    backup: false,
   });
   const [featuredRecoSearch, setFeaturedRecoSearch] = useState("");
   const [featuredCollecSearch, setFeaturedCollecSearch] = useState("");
@@ -1094,6 +1101,31 @@ export default function Storefront() {
     return baseProducts.filter((p) => !p.hidden);
   }, [baseProducts, activeCategory, activeAisle, debouncedSearch, navQuickFilter]);
 
+  // Búsqueda instantánea y limpia: lista de productos que coinciden directamente con la búsqueda
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) return [];
+    const normQ = normalize(q);
+    const terms = normQ.split(/\s+/).filter(Boolean);
+    return baseProducts.filter((p) => {
+      if (p.hidden) return false;
+      const nameNorm = normalize(p.name || "");
+      const catNorm = normalize(p.category || "");
+      const aisleNorm = normalize(p.aisle || "");
+      const subNorm = normalize(p.subcategory || "");
+      const descNorm = normalize(p.description || "");
+
+      return terms.every((term) =>
+        nameNorm.includes(term) ||
+        catNorm.includes(term) ||
+        aisleNorm.includes(term) ||
+        subNorm.includes(term) ||
+        descNorm.includes(term) ||
+        fuzzyMatch(term, p.name)
+      );
+    });
+  }, [searchQuery, baseProducts]);
+
   const homeCollectionProducts = useMemo(() => {
     const customIds = settings.homeCollectionProductIds ?? [];
     if (customIds.length > 0) {
@@ -1101,16 +1133,15 @@ export default function Storefront() {
         .map((id) => baseProducts.find((p) => p.id === id && !p.hidden))
         .filter((p): p is Product => Boolean(p));
       if (selected.length >= 6) return selected.slice(0, 6);
-      const remainder = (filteredProducts.length > 0 ? filteredProducts : baseProducts).filter(
+      const remainder = baseProducts.filter(
         (p) => !p.hidden && !selected.some((s) => s.id === p.id)
       );
       const combined = [...selected, ...remainder];
       if (combined.length > 0) return combined.slice(0, 6);
     }
     const nonHidden = baseProducts.filter((p) => !p.hidden);
-    if (filteredProducts.length > 0) return filteredProducts.slice(0, 6);
     return nonHidden.slice(0, 6);
-  }, [baseProducts, filteredProducts, settings.homeCollectionProductIds]);
+  }, [baseProducts, settings.homeCollectionProductIds]);
 
   const opportunitiesCustomProducts = useMemo(() => {
     const customIds = settings.opportunitiesProductIds ?? [];
@@ -1835,7 +1866,8 @@ export default function Storefront() {
         });
         const data = await res.json();
         if (data.ok) {
-          showToast(`¡Importados ${data.importedCount} productos con éxito! Pasillos y categorías creados.`);
+          const imgText = data.imagesExtracted > 0 ? ` y ${data.imagesExtracted} imágenes extraídas` : "";
+          showToast(`¡Importados ${data.importedCount} productos con éxito${imgText}! Pasillos y categorías creados.`);
           refreshMenu();
         } else {
           showToast(data.error || "Error al importar Excel");
@@ -1845,6 +1877,66 @@ export default function Storefront() {
     } catch (err) {
       console.error(err);
       showToast("Error al leer el archivo Excel");
+    } finally {
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const handleExportBackupZip = () => {
+    showToast("Generando copia de seguridad completa con imágenes (.ZIP)...");
+    const link = document.createElement("a");
+    link.href = `${import.meta.env.BASE_URL}api/admin/backup/export`;
+    link.download = `fellas_backup_${new Date().toISOString().slice(0, 10)}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportBackupJson = () => {
+    showToast("Descargando catálogo en JSON...");
+    const link = document.createElement("a");
+    link.href = `${import.meta.env.BASE_URL}api/admin/backup/export-json`;
+    link.download = `fellas_catalogo_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleRestoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      showToast(`Restaurando copia de seguridad desde ${file.name}...`);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const buffer = event.target?.result as ArrayBuffer;
+        if (!buffer) return;
+        let binary = "";
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+
+        const res = await fetch(`${import.meta.env.BASE_URL}api/admin/backup/restore`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ base64, filename: file.name }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(data.message || "¡Copia de seguridad restaurada con éxito!");
+          refreshMenu();
+          loadQuickMediaImages();
+        } else {
+          showToast(data.error || "Error al restaurar copia de seguridad");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      console.error(err);
+      showToast("Error al procesar el archivo de copia de seguridad");
     } finally {
       if (e.target) e.target.value = "";
     }
@@ -2968,8 +3060,136 @@ export default function Storefront() {
             </div>
           )}
 
-          {/* RENDERIZADO CONDICIONAL: PESTAÑA DEDICADA DE PRODUCTOS vs VISTA PRINCIPAL HOME */}
-          {showDedicatedProductsPage && !settings.contingencyMode ? (
+          {/* RENDERIZADO CONDICIONAL: 1. BÚSQUEDA EXCLUSIVA (PRIORIDAD MÁXIMA) vs 2. PESTAÑA DEDICADA vs 3. HOME */}
+          {searchQuery.trim().length > 0 ? (
+            /* VISTA EXCLUSIVA DE RESULTADOS DE BÚSQUEDA (Sin Colecciones, Sin Recomendados, Sin Banners) */
+            <section className="w-full px-3 sm:px-6 md:px-8 mt-4 sm:mt-6 mb-12 animate-fade-in">
+              {/* Header de Búsqueda */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-6 border-b border-white/10">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Search size={18} className="text-[#ffd025]" />
+                    <h2 className="text-base sm:text-lg font-black uppercase text-white tracking-wider">
+                      Resultados de Búsqueda
+                    </h2>
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#ffd025]/20 text-[#ffd025] font-bold font-mono border border-[#ffd025]/30">
+                      {searchResults.length} {searchResults.length === 1 ? "producto encontrado" : "productos encontrados"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Mostrando resultados que coinciden con: <span className="text-white font-bold">"{searchQuery}"</span>
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-xs font-bold transition flex items-center gap-1.5 border border-white/10 cursor-pointer"
+                >
+                  <X size={14} />
+                  <span>Limpiar búsqueda</span>
+                </button>
+              </div>
+
+              {/* Grilla Directa de Productos Encontrados */}
+              {searchResults.length === 0 ? (
+                <div className="text-center py-16 px-4 border border-dashed border-white/10 rounded-3xl bg-white/[0.02]">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-3 text-gray-500">
+                    <Search size={28} />
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-white mb-1">
+                    No se encontraron productos para "{searchQuery}"
+                  </h3>
+                  <p className="text-xs text-gray-400 max-w-sm mx-auto mb-5">
+                    Intenta buscando con otra palabra o revisa que esté escrita correctamente.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="px-6 py-2.5 rounded-xl bg-[#ffd025] text-black font-black uppercase text-xs tracking-wider hover:bg-[#ffe066] transition cursor-pointer shadow-lg shadow-[#ffd025]/20"
+                  >
+                    Ver catálogo completo
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-x-2 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
+                  {searchResults.map((product) => (
+                    <div
+                      key={product.id}
+                      className="group flex flex-col justify-between h-full w-full"
+                    >
+                      <div>
+                        <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                          {product.image ? (
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="w-full h-full object-cover rounded-none group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src =
+                                  "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
+                              <Package size={20} className="text-[#ffd025]/70" />
+                              <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
+                            </div>
+                          )}
+
+                          {product.oferta && (
+                            <div className="absolute top-0 left-0 z-10">
+                              <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-none shadow">
+                                OFERTA
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
+                          {(product.subcategory || product.category || product.aisle) ? (
+                            <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                              {product.subcategory || product.category || product.aisle}
+                            </span>
+                          ) : (
+                            <span className="text-[7.5px] sm:text-[9px] font-medium uppercase tracking-wider text-transparent select-none">
+                              -
+                            </span>
+                          )}
+                        </div>
+
+                        <h4
+                          title={product.name}
+                          className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                        >
+                          {product.name}
+                        </h4>
+                      </div>
+
+                      <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
+                        <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                          ${Number(product.price || 0).toLocaleString("es-CL")}
+                        </span>
+
+                        <button
+                          onClick={() => handleAddToCartClick(product)}
+                          disabled={!isStoreOpen}
+                          className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                          title="Añadir al carrito"
+                          aria-label="Añadir al carrito"
+                        >
+                          <Plus size={12} strokeWidth={2.5} />
+                          <span className="hidden sm:inline text-[10px]">Añadir</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : showDedicatedProductsPage && !settings.contingencyMode ? (
             <div className="animate-fade-in pb-4">
               <div className="w-full px-3 sm:px-6 md:px-8 mt-3 sm:mt-5">
                 {/* Botón Volver a Inicio */}
@@ -4507,6 +4727,7 @@ export default function Storefront() {
                           contingency: nextVal,
                           contact: nextVal,
                           gallery: nextVal,
+                          backup: nextVal,
                         });
                       }}
                       className="px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-xl text-xs font-bold transition-all border border-white/10 flex items-center gap-2"
@@ -4527,7 +4748,7 @@ export default function Storefront() {
                 {/* Step Sub-Tabs (Paso a Paso) */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-white/10 scrollbar-hide">
                   {[
-                    { id: "all", label: "Todos los Ajustes", icon: Layers, badge: "9 Plegables" },
+                    { id: "all", label: "Todos los Ajustes", icon: Layers, badge: "10 Plegables" },
                     { id: "brand", label: "1. Marca & Logo", icon: Edit3, badge: settingsDraft.pageTitle || "Tienda" },
                     { id: "ticker", label: "2. Avisos Ticker", icon: Sparkles, badge: `${(settingsDraft.announcements ?? []).length} avisos` },
                     { id: "banners", label: "3. Banners de la Tienda", icon: ImageIcon, badge: `${(settingsDraft.bannerSlides ?? []).length} slides + 2 fijos` },
@@ -4537,6 +4758,7 @@ export default function Storefront() {
                     { id: "contingency", label: "7. Contingencia", icon: Ban, badge: settingsDraft.contingencyMode ? "🔴 Activo" : "🟢 Normal", highlight: Boolean(settingsDraft.contingencyMode) },
                     { id: "contact", label: "8. Contacto & Redes", icon: Phone, badge: settingsDraft.contactPhone ? "Listo" : "Incompleto" },
                     { id: "gallery", label: "9. Galería 4:5", icon: Camera, badge: `${(settingsDraft.galleryImages ?? []).length || 6} fotos` },
+                    { id: "backup", label: "10. Respaldo & Render", icon: ShieldCheck, badge: "Persistencia" },
                   ].map((step) => {
                     const Icon = step.icon;
                     const isActive = settingsSubTab === step.id;
@@ -6910,6 +7132,142 @@ export default function Storefront() {
                       )}
                     </div>
                   )}
+
+                  {/* SECCIÓN 10: Persistencia, Copias de Seguridad & Render */}
+                  {(settingsSubTab === "all" || settingsSubTab === "backup") && (
+                    <div className="bg-[#13131f]/90 backdrop-blur-2xl rounded-3xl border border-white/10 overflow-hidden shadow-xl shadow-black/50 transition-all">
+                      <button
+                        type="button"
+                        onClick={() => toggleSettingsSection("backup")}
+                        className="w-full p-5 sm:p-6 flex items-center justify-between text-left hover:bg-white/[0.02] transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                            <ShieldCheck size={20} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-white text-base uppercase">Paso 10: Copias de Seguridad & Persistencia (Render / GitHub)</span>
+                              <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                                Anti-Pérdida
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5">Protege tus productos, fotos y configuraciones ante cualquier actualización o redespliegue.</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <span className="text-xs font-mono font-bold hidden sm:inline">
+                            {openSettingsSections.backup ? "Plegar" : "Abrir"}
+                          </span>
+                          {openSettingsSections.backup ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </div>
+                      </button>
+
+                      {openSettingsSections.backup && (
+                        <div className="p-6 pt-0 border-t border-white/5 space-y-6 animate-fade-in">
+                          {/* Banner explicativo paso a paso */}
+                          <div className="bg-gradient-to-br from-emerald-950/40 via-[#181826] to-[#12121d] border border-emerald-500/30 rounded-2xl p-5 mt-4">
+                            <div className="flex items-start gap-3.5">
+                              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                                <Archive size={18} />
+                              </div>
+                              <div className="space-y-2 text-xs">
+                                <h4 className="font-black text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                                  ¿Cómo mantener todas tus fotos y productos al actualizar en Render o GitHub?
+                                </h4>
+                                <p className="text-gray-300 leading-relaxed">
+                                  En servicios como Render (en planes gratuitos sin disco persistente), cada despliegue desde GitHub crea un contenedor nuevo. Con las siguientes 2 opciones nunca más perderás tus imágenes ni productos:
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                                  <div className="bg-black/30 p-3 rounded-xl border border-white/10 space-y-1">
+                                    <span className="font-bold text-[#ffd025] flex items-center gap-1.5 text-[11px] uppercase">
+                                      <DownloadCloud size={14} /> Opción 1: Respaldo ZIP (1 Clic)
+                                    </span>
+                                    <p className="text-gray-400 text-[11px]">
+                                      Haz clic en <strong>Descargar Respaldo ZIP</strong> y guárdalo en tu computador. Contiene todos tus productos, precios, fotos y ajustes. Al actualizar la página, haces clic en <strong>Restaurar Copia</strong> y en 2 segundos todo vuelve a estar como antes.
+                                    </p>
+                                  </div>
+                                  <div className="bg-black/30 p-3 rounded-xl border border-white/10 space-y-1">
+                                    <span className="font-bold text-emerald-400 flex items-center gap-1.5 text-[11px] uppercase">
+                                      <Database size={14} /> Opción 2: Auto-Sincronización en Git
+                                    </span>
+                                    <p className="text-gray-400 text-[11px]">
+                                      Cada imagen que subes se auto-guarda en <code className="text-[#ffd025]">src/server/seed_uploads/</code> y tus productos en <code className="text-[#ffd025]">src/server/seed_db.json</code>. Si haces commit de esos archivos a tu repositorio Git, Render los compilará automáticamente en cada despliegue.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Botones de Acción Inmediata */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {/* 1. Descargar Respaldo ZIP */}
+                            <button
+                              type="button"
+                              onClick={handleExportBackupZip}
+                              className="p-4 bg-gradient-to-br from-purple-900/30 to-purple-950/50 hover:from-purple-900/50 hover:to-purple-950/70 border border-purple-500/40 rounded-2xl flex flex-col justify-between text-left transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-lg shadow-purple-950/50 cursor-pointer"
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition-transform">
+                                  <Archive size={20} />
+                                </div>
+                                <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                  Recomendado
+                                </span>
+                              </div>
+                              <div>
+                                <h5 className="font-black text-white text-sm uppercase">Descargar Respaldo ZIP</h5>
+                                <p className="text-[11px] text-gray-400 mt-1">Descarga un archivo .ZIP con la base de datos completa y TODAS las fotos subidas.</p>
+                              </div>
+                            </button>
+
+                            {/* 2. Restaurar Respaldo ZIP o JSON */}
+                            <label className="p-4 bg-gradient-to-br from-emerald-900/30 to-emerald-950/50 hover:from-emerald-900/50 hover:to-emerald-950/70 border border-emerald-500/40 rounded-2xl flex flex-col justify-between text-left transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-lg shadow-emerald-950/50 cursor-pointer">
+                              <input
+                                type="file"
+                                accept=".zip, .json"
+                                onChange={handleRestoreBackup}
+                                className="hidden"
+                              />
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center border border-emerald-500/30 group-hover:scale-110 transition-transform">
+                                  <UploadCloud size={20} />
+                                </div>
+                                <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                  1-Clic
+                                </span>
+                              </div>
+                              <div>
+                                <h5 className="font-black text-white text-sm uppercase">Restaurar Copia (.ZIP / .JSON)</h5>
+                                <p className="text-[11px] text-gray-400 mt-1">Sube tu archivo .ZIP o .JSON para restaurar todos tus productos y fotos inmediatamente.</p>
+                              </div>
+                            </label>
+
+                            {/* 3. Exportar Catálogo JSON */}
+                            <button
+                              type="button"
+                              onClick={handleExportBackupJson}
+                              className="p-4 bg-gradient-to-br from-blue-900/30 to-blue-950/50 hover:from-blue-900/50 hover:to-blue-950/70 border border-blue-500/40 rounded-2xl flex flex-col justify-between text-left transition-all hover:scale-[1.01] active:scale-[0.99] group shadow-lg shadow-blue-950/50 cursor-pointer"
+                            >
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-300 flex items-center justify-center border border-blue-500/30 group-hover:scale-110 transition-transform">
+                                  <Download size={20} />
+                                </div>
+                                <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                  Liviano
+                                </span>
+                              </div>
+                              <div>
+                                <h5 className="font-black text-white text-sm uppercase">Descargar Catálogo JSON</h5>
+                                <p className="text-[11px] text-gray-400 mt-1">Copia de texto con todos los productos, categorías, pedidos y configuración.</p>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Final floating save action */}
@@ -8684,6 +9042,30 @@ export default function Storefront() {
 
                       {/* Excel & Bulk Controls (Icon-only, single line) */}
                       <div className="flex items-center gap-2 flex-nowrap shrink-0">
+                        {/* Respaldo Completo ZIP con fotos y catálogo */}
+                        <button
+                          type="button"
+                          onClick={handleExportBackupZip}
+                          title="Descargar Copia de Seguridad Completa con imágenes (.ZIP) para no perder nada al actualizar en Render o GitHub"
+                          className="flex items-center justify-center p-2.5 bg-purple-600/20 border border-purple-500/30 text-purple-300 rounded-xl hover:bg-purple-600/35 transition-colors shrink-0"
+                        >
+                          <Archive size={15} />
+                        </button>
+
+                        {/* Restaurar Respaldo ZIP o JSON */}
+                        <label
+                          title="Restaurar Copia de Seguridad (.ZIP con imágenes o .JSON) sin perder nada"
+                          className="flex items-center justify-center p-2.5 bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded-xl hover:bg-emerald-600/35 transition-colors cursor-pointer shrink-0"
+                        >
+                          <ShieldCheck size={15} />
+                          <input
+                            type="file"
+                            accept=".zip, .json"
+                            className="hidden"
+                            onChange={handleRestoreBackup}
+                          />
+                        </label>
+
                         <button
                           type="button"
                           onClick={() => downloadProductsExcel(products)}

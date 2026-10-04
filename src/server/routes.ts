@@ -5,15 +5,212 @@ import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import * as XLSX from "xlsx";
+import JSZip from "jszip";
 import { GoogleGenAI } from "@google/genai";
 import { dbManager, type Product, type Order, type OrderItem } from "./db.ts";
 
 const JWT_SECRET = process.env.JWT_SECRET || "fellas-market-secret-jwt-key-2024";
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+const SEED_UPLOADS_DIR = path.resolve(process.cwd(), "src", "server", "seed_uploads");
+const MEDIA_META_FILE = path.join(DATA_DIR, "media_library.json");
+const SEED_MEDIA_FILE = path.resolve(process.cwd(), "src", "server", "seed_media.json");
 
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+if (!fs.existsSync(SEED_UPLOADS_DIR)) {
+  fs.mkdirSync(SEED_UPLOADS_DIR, { recursive: true });
+}
+
+export interface MediaMetaItem {
+  id: string;
+  name: string;
+  url: string;
+  createdAt: string;
+  size?: number;
+}
+
+export function getMediaLibraryMeta(): MediaMetaItem[] {
+  try {
+    if (fs.existsSync(MEDIA_META_FILE)) {
+      const items = JSON.parse(fs.readFileSync(MEDIA_META_FILE, "utf-8"));
+      if (Array.isArray(items) && items.length > 0) return items;
+    }
+  } catch {}
+
+  try {
+    if (fs.existsSync(SEED_MEDIA_FILE)) {
+      const items = JSON.parse(fs.readFileSync(SEED_MEDIA_FILE, "utf-8"));
+      if (Array.isArray(items) && items.length > 0) {
+        saveMediaLibraryMeta(items);
+        return items;
+      }
+    }
+  } catch {}
+
+  return [];
+}
+
+export function saveMediaLibraryMeta(items: MediaMetaItem[]) {
+  try {
+    fs.writeFileSync(MEDIA_META_FILE, JSON.stringify(items, null, 2), "utf-8");
+    try {
+      fs.writeFileSync(SEED_MEDIA_FILE, JSON.stringify(items, null, 2), "utf-8");
+    } catch {}
+  } catch (err) {
+    console.error("Error saving media library meta:", err);
+  }
+}
+
+export function saveExtractedImage(
+  imgBuffer: Buffer,
+  originalName: string,
+  fallbackExt = "jpg"
+): { fileId: string; url: string } {
+  let ext = fallbackExt;
+  const extMatch = originalName.match(/\.(png|jpe?g|webp|gif|bmp)$/i);
+  if (extMatch) {
+    ext = extMatch[1].toLowerCase().replace("jpeg", "jpg");
+  } else if (imgBuffer.length > 4) {
+    if (imgBuffer[0] === 0x89 && imgBuffer[1] === 0x50 && imgBuffer[2] === 0x4e && imgBuffer[3] === 0x47) {
+      ext = "png";
+    } else if (imgBuffer[0] === 0xff && imgBuffer[1] === 0xd8 && imgBuffer[2] === 0xff) {
+      ext = "jpg";
+    } else if (imgBuffer[0] === 0x52 && imgBuffer[1] === 0x49 && imgBuffer[2] === 0x46 && imgBuffer[3] === 0x46) {
+      ext = "webp";
+    } else if (imgBuffer[0] === 0x47 && imgBuffer[1] === 0x49 && imgBuffer[2] === 0x46) {
+      ext = "gif";
+    }
+  }
+
+  const fileId = `${randomUUID()}.${ext}`;
+  const filePath = path.join(UPLOADS_DIR, fileId);
+  const seedPath = path.join(SEED_UPLOADS_DIR, fileId);
+
+  fs.writeFileSync(filePath, imgBuffer);
+  try {
+    fs.writeFileSync(seedPath, imgBuffer);
+  } catch {}
+
+  try {
+    const metaList = getMediaLibraryMeta();
+    metaList.unshift({
+      id: fileId,
+      name: originalName || `Excel_${fileId.slice(0, 8)}.${ext}`,
+      url: `/api/storage/objects/${fileId}`,
+      createdAt: new Date().toISOString(),
+      size: imgBuffer.length,
+    });
+    saveMediaLibraryMeta(metaList);
+  } catch (err) {
+    console.error("Error updating media library meta for excel image:", err);
+  }
+
+  return {
+    fileId,
+    url: `/api/storage/objects/${fileId}`,
+  };
+}
+
+export async function extractImagesFromXlsx(buffer: Buffer) {
+  const rowImages: { [excelRow: number]: { filename: string; buffer: Buffer } } = {};
+  const cellImages: { [key: string]: { filename: string; buffer: Buffer } } = {};
+  const allMediaList: { filename: string; buffer: Buffer }[] = [];
+  const allMediaByName: { [name: string]: { filename: string; buffer: Buffer } } = {};
+
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+
+    for (const [filepath, file] of Object.entries(zip.files)) {
+      if (filepath.startsWith("xl/media/") && !file.dir) {
+        const filename = filepath.replace("xl/media/", "");
+        const content = await file.async("nodebuffer");
+        const item = { filename, buffer: content };
+        allMediaList.push(item);
+        allMediaByName[filename.toLowerCase()] = item;
+      }
+    }
+
+    allMediaList.sort((a, b) => {
+      const numA = parseInt(a.filename.replace(/\D/g, ""), 10) || 0;
+      const numB = parseInt(b.filename.replace(/\D/g, ""), 10) || 0;
+      return numA - numB;
+    });
+
+    const relsMap: { [relsFile: string]: { [rId: string]: string } } = {};
+    for (const [filepath, file] of Object.entries(zip.files)) {
+      if (filepath.endsWith(".rels") && !file.dir) {
+        const xml = await file.async("text");
+        const map: { [rId: string]: string } = {};
+        const relMatches = xml.matchAll(/<Relationship[^>]+Id="([^"]+)"[^>]+Target="([^"]+)"/g);
+        for (const m of relMatches) {
+          const rId = m[1];
+          let target = m[2];
+          const parts = target.split("/");
+          map[rId] = parts[parts.length - 1];
+        }
+        relsMap[filepath] = map;
+      }
+    }
+
+    for (const [filepath, file] of Object.entries(zip.files)) {
+      if (filepath.startsWith("xl/drawings/drawing") && filepath.endsWith(".xml")) {
+        const xml = await file.async("text");
+        const relsPath = filepath.replace("xl/drawings/", "xl/drawings/_rels/") + ".rels";
+        const rels = relsMap[relsPath] || {};
+
+        const anchorRegex = /<xdr:(?:twoCellAnchor|oneCellAnchor)[^>]*>([\s\S]*?)<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g;
+        let match;
+        while ((match = anchorRegex.exec(xml)) !== null) {
+          const block = match[1];
+          const fromRowMatch = block.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+          const fromColMatch = block.match(/<xdr:from>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>/);
+          const blipMatch = block.match(/<a:blip[^>]+(?:r:embed|r:link)="([^"]+)"/);
+
+          if (fromRowMatch && blipMatch) {
+            const row = parseInt(fromRowMatch[1], 10);
+            const rId = blipMatch[1];
+            const mediaName = rels[rId];
+            if (mediaName && allMediaByName[mediaName.toLowerCase()]) {
+              const mediaObj = allMediaByName[mediaName.toLowerCase()];
+              rowImages[row] = mediaObj;
+              if (fromColMatch) {
+                const col = parseInt(fromColMatch[1], 10);
+                cellImages[`${row},${col}`] = mediaObj;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    for (const [filepath, file] of Object.entries(zip.files)) {
+      if (filepath.includes("cellimages.xml") && !filepath.endsWith(".rels") && !file.dir) {
+        const xml = await file.async("text");
+        const relsPath = filepath.replace("cellimages.xml", "_rels/cellimages.xml.rels");
+        const rels = relsMap[relsPath] || relsMap["xl/_rels/cellimages.xml.rels"] || {};
+
+        const blipMatches = xml.matchAll(/<a:blip[^>]+(?:r:embed|r:link)="([^"]+)"/g);
+        let idx = 0;
+        for (const bm of blipMatches) {
+          const rId = bm[1];
+          const mediaName = rels[rId];
+          if (mediaName && allMediaByName[mediaName.toLowerCase()]) {
+            const mediaObj = allMediaByName[mediaName.toLowerCase()];
+            if (!rowImages[idx + 1]) {
+              rowImages[idx + 1] = mediaObj;
+            }
+          }
+          idx++;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error reading xlsx images with JSZip:", err);
+  }
+
+  return { rowImages, cellImages, allMediaList, allMediaByName };
 }
 
 export const apiRouter = express.Router();
@@ -317,21 +514,32 @@ apiRouter.get("/admin/download-template", (_req, res) => {
   }
 });
 
-apiRouter.post("/admin/import-excel", (req, res) => {
+apiRouter.post("/admin/import-excel", async (req, res) => {
   try {
     const { base64 } = req.body;
     if (!base64) {
-      res.status(400).json({ error: "No file data provided" });
+      res.status(400).json({ error: "No se proporcionaron datos del archivo Excel" });
       return;
     }
     const buffer = Buffer.from(base64, "base64");
+
+    // Extraer de forma asíncrona todas las imágenes adjuntas dentro del archivo XLSX (OpenXML DrawingML / Media)
+    const { rowImages, cellImages, allMediaList, allMediaByName } = await extractImagesFromXlsx(buffer);
+
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
+    const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:Z1000");
+    const headerRow = range.s.r; // Fila de cabeceras en Excel (típicamente 0)
     const rows: any[] = XLSX.utils.sheet_to_json(worksheet);
 
     let count = 0;
-    for (const row of rows) {
+    let extractedCount = 0;
+    const usedMediaFilenames = new Set<string>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const excelRow = headerRow + 1 + i; // Índice de fila 0-indexed en Excel
       const keys = Object.keys(row);
       const normalize = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 
@@ -352,11 +560,76 @@ apiRouter.post("/admin/import-excel", (req, res) => {
       if (!name) continue;
 
       const description = String(findKey(["descripcion", "descripccion", "detalles", "det", "desc", "description"]) || "").trim();
-      const price = Number(findKey(["precio", "valor", "costo", "price", "$"]) || 0);
+      
+      const rawPrice = findKey(["precio", "valor", "costo", "price", "$"]);
+      let price = 0;
+      if (typeof rawPrice === "number") {
+        price = isNaN(rawPrice) ? 0 : rawPrice;
+      } else if (rawPrice) {
+        const digits = String(rawPrice).replace(/[^0-9]/g, "");
+        price = digits ? parseInt(digits, 10) : 0;
+      }
+
       const aisle = String(findKey(["pasillo", "seccion", "sección", "zona", "aisle", "departamento"]) || "General").trim();
       const category = String(findKey(["categoria", "categoría", "category", "familia"]) || "General").trim();
       const subcategory = String(findKey(["subcategoria", "subcategoría", "sub-categoria", "subcategory", "subfamilia"]) || "General").trim();
-      const image = String(findKey(["imagen", "foto", "image", "url", "img", "fotografia"]) || "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80").trim();
+      
+      const rawImageVal = findKey(["imagen", "foto", "image", "url", "img", "fotografia", "adjunto", "archivo"]);
+      let finalImageUrl = "";
+
+      // 1. Verificar si hay imagen adjunta vinculada a esta fila exacta del Excel
+      if (rowImages[excelRow] && !usedMediaFilenames.has(rowImages[excelRow].filename)) {
+        const media = rowImages[excelRow];
+        const saved = saveExtractedImage(media.buffer, `${name}_${media.filename}`);
+        finalImageUrl = saved.url;
+        usedMediaFilenames.add(media.filename);
+        extractedCount++;
+      }
+
+      // 2. Si no hay por anclaje directo de fila, verificar el texto de la celda de imagen
+      if (!finalImageUrl && rawImageVal) {
+        const rawStr = String(rawImageVal).trim();
+        if (rawStr.startsWith("data:image/")) {
+          // Data URI Base64
+          const commaIdx = rawStr.indexOf(",");
+          if (commaIdx !== -1) {
+            const mimeMatch = rawStr.match(/^data:image\/([a-zA-Z0-9]+);base64,/);
+            const ext = mimeMatch ? mimeMatch[1] : "jpg";
+            const b64Data = rawStr.slice(commaIdx + 1);
+            const imgBuf = Buffer.from(b64Data, "base64");
+            const saved = saveExtractedImage(imgBuf, `${name}_excel.${ext}`, ext);
+            finalImageUrl = saved.url;
+            extractedCount++;
+          }
+        } else if (rawStr.startsWith("http://") || rawStr.startsWith("https://")) {
+          // URL externa
+          finalImageUrl = rawStr;
+        } else if (allMediaByName[rawStr.toLowerCase()]) {
+          // El texto de la celda coincide con el nombre de un archivo adjunto en el zip
+          const media = allMediaByName[rawStr.toLowerCase()];
+          const saved = saveExtractedImage(media.buffer, `${name}_${media.filename}`);
+          finalImageUrl = saved.url;
+          usedMediaFilenames.add(media.filename);
+          extractedCount++;
+        }
+      }
+
+      // 3. Fallback: Si la fila no tenía imagen pero el Excel traía imágenes adjuntas sin asignar
+      if (!finalImageUrl) {
+        const unusedMedia = allMediaList.find((m) => !usedMediaFilenames.has(m.filename));
+        if (unusedMedia) {
+          const saved = saveExtractedImage(unusedMedia.buffer, `${name}_${unusedMedia.filename}`);
+          finalImageUrl = saved.url;
+          usedMediaFilenames.add(unusedMedia.filename);
+          extractedCount++;
+        }
+      }
+
+      // 4. Si definitivamente no hay imagen adjunta ni texto
+      if (!finalImageUrl) {
+        finalImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80";
+      }
+
       const ofertaRaw = findKey(["oferta", "en oferta", "oferta?", "promo", "promocion"]);
       const oferta = ofertaRaw === true || String(ofertaRaw).toLowerCase() === 'si' || String(ofertaRaw).toLowerCase() === 'true' || String(ofertaRaw) === '1' || String(ofertaRaw).toLowerCase() === 'sí';
 
@@ -382,7 +655,7 @@ apiRouter.post("/admin/import-excel", (req, res) => {
         name,
         description,
         price,
-        image,
+        image: finalImageUrl,
         category,
         aisle,
         subcategory,
@@ -400,10 +673,191 @@ apiRouter.post("/admin/import-excel", (req, res) => {
       count++;
     }
 
-    res.json({ ok: true, importedCount: count });
+    res.json({ ok: true, importedCount: count, imagesExtracted: extractedCount });
   } catch (err: any) {
     console.error("Excel import error:", err);
     res.status(500).json({ error: "Error al procesar el archivo Excel: " + err.message });
+  }
+});
+
+// Backup & Persistence routes for GitHub / Render deploys
+apiRouter.get("/admin/backup/export", async (_req, res) => {
+  try {
+    const zip = new JSZip();
+
+    // 1. Database
+    const dbData = dbManager.getRaw();
+    zip.file("fellas_db.json", JSON.stringify(dbData, null, 2));
+
+    // 2. Media library metadata
+    const mediaMeta = getMediaLibraryMeta();
+    zip.file("media_library.json", JSON.stringify(mediaMeta, null, 2));
+
+    // 3. Uploaded photos
+    const uploadsFolder = zip.folder("uploads");
+    if (fs.existsSync(UPLOADS_DIR) && uploadsFolder) {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      for (const file of files) {
+        const fullPath = path.join(UPLOADS_DIR, file);
+        try {
+          if (fs.statSync(fullPath).isFile()) {
+            const fileData = fs.readFileSync(fullPath);
+            uploadsFolder.file(file, fileData);
+          }
+        } catch {}
+      }
+    }
+
+    const zipBuffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    res.setHeader("Content-Disposition", `attachment; filename="fellas_backup_${timestamp}.zip"`);
+    res.setHeader("Content-Type", "application/zip");
+    res.send(zipBuffer);
+  } catch (err: any) {
+    console.error("Backup export error:", err);
+    res.status(500).json({ error: "Error al exportar copia de seguridad: " + err.message });
+  }
+});
+
+apiRouter.get("/admin/backup/export-json", (_req, res) => {
+  try {
+    const dbData = dbManager.getRaw();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 10);
+    res.setHeader("Content-Disposition", `attachment; filename="fellas_catalogo_${timestamp}.json"`);
+    res.setHeader("Content-Type", "application/json");
+    res.send(JSON.stringify(dbData, null, 2));
+  } catch (err: any) {
+    res.status(500).json({ error: "Error al exportar JSON: " + err.message });
+  }
+});
+
+apiRouter.post("/admin/backup/restore", async (req, res) => {
+  try {
+    const { base64, filename } = req.body;
+    if (!base64) {
+      res.status(400).json({ error: "No se proporcionaron datos de archivo para restaurar" });
+      return;
+    }
+
+    let cleanBase64 = base64;
+    if (cleanBase64.includes(";base64,")) {
+      cleanBase64 = cleanBase64.split(";base64,")[1];
+    }
+    const buffer = Buffer.from(cleanBase64, "base64");
+
+    const isZip = (filename && filename.toLowerCase().endsWith(".zip")) ||
+      (buffer.length > 4 && buffer[0] === 0x50 && buffer[1] === 0x4b);
+
+    if (isZip) {
+      const zip = await JSZip.loadAsync(buffer);
+      let productsCount = 0;
+      let restoredImagesCount = 0;
+
+      // 1. Restore fellas_db.json
+      const dbEntry = zip.file("fellas_db.json") || Object.values(zip.files).find((f) => f.name.endsWith("fellas_db.json") || f.name.endsWith(".json"));
+      if (dbEntry) {
+        const text = await dbEntry.async("string");
+        const parsed = JSON.parse(text);
+        if (parsed) {
+          dbManager.restoreRaw(parsed);
+          productsCount = parsed.products?.length || 0;
+          try {
+            fs.writeFileSync(path.join(DATA_DIR, "fellas_db.json"), JSON.stringify(parsed, null, 2), "utf-8");
+            fs.writeFileSync(path.resolve(process.cwd(), "src", "server", "seed_db.json"), JSON.stringify(parsed, null, 2), "utf-8");
+          } catch {}
+        }
+      }
+
+      // 2. Restore media_library.json
+      const mediaEntry = zip.file("media_library.json") || Object.values(zip.files).find((f) => f.name.endsWith("media_library.json"));
+      if (mediaEntry) {
+        try {
+          const mediaText = await mediaEntry.async("string");
+          const mediaParsed = JSON.parse(mediaText);
+          if (Array.isArray(mediaParsed)) {
+            saveMediaLibraryMeta(mediaParsed);
+          }
+        } catch {}
+      }
+
+      // 3. Restore all uploaded files in uploads/
+      const zipFiles = Object.keys(zip.files);
+      for (const relPath of zipFiles) {
+        const entry = zip.files[relPath];
+        if (entry.dir) continue;
+        if (relPath.startsWith("uploads/") || (!relPath.endsWith(".json") && !relPath.endsWith(".md"))) {
+          const fileName = path.basename(relPath);
+          if (!fileName || fileName.startsWith(".")) continue;
+          const fileBuf = await entry.async("nodebuffer");
+          const destUpload = path.join(UPLOADS_DIR, fileName);
+          const destSeed = path.join(SEED_UPLOADS_DIR, fileName);
+          fs.writeFileSync(destUpload, fileBuf);
+          try {
+            fs.writeFileSync(destSeed, fileBuf);
+          } catch {}
+          restoredImagesCount++;
+        }
+      }
+
+      // Re-index media library
+      const metaList = getMediaLibraryMeta();
+      const metaMap = new Map<string, MediaMetaItem>(metaList.map((m) => [m.id, m]));
+      if (fs.existsSync(UPLOADS_DIR)) {
+        const diskFiles = fs.readdirSync(UPLOADS_DIR);
+        for (const file of diskFiles) {
+          if (!metaMap.has(file)) {
+            try {
+              const stats = fs.statSync(path.join(UPLOADS_DIR, file));
+              if (stats.isFile()) {
+                metaMap.set(file, {
+                  id: file,
+                  name: `Imagen_${file.slice(0, 8)}.jpg`,
+                  url: `/api/storage/objects/${file}`,
+                  createdAt: stats.mtime.toISOString(),
+                  size: stats.size,
+                });
+              }
+            } catch {}
+          }
+        }
+        saveMediaLibraryMeta(Array.from(metaMap.values()));
+      }
+
+      res.json({
+        ok: true,
+        message: `¡Copia de seguridad restaurada exitosamente! ${productsCount} productos y ${restoredImagesCount} imágenes recuperadas.`,
+        productsCount,
+        restoredImagesCount,
+      });
+    } else {
+      // JSON format
+      const text = buffer.toString("utf-8");
+      const parsed = JSON.parse(text);
+      if (!parsed || (!parsed.products && !parsed.settings)) {
+        res.status(400).json({ error: "El archivo JSON no tiene un formato válido de base de datos Fellas" });
+        return;
+      }
+      dbManager.restoreRaw(parsed);
+      const productsCount = parsed.products?.length || 0;
+      try {
+        fs.writeFileSync(path.join(DATA_DIR, "fellas_db.json"), JSON.stringify(parsed, null, 2), "utf-8");
+        fs.writeFileSync(path.resolve(process.cwd(), "src", "server", "seed_db.json"), JSON.stringify(parsed, null, 2), "utf-8");
+      } catch {}
+
+      res.json({
+        ok: true,
+        message: `¡Base de datos restaurada! ${productsCount} productos recuperados.`,
+        productsCount,
+      });
+    }
+  } catch (err: any) {
+    console.error("Backup restore error:", err);
+    res.status(500).json({ error: "Error al restaurar copia de seguridad: " + err.message });
   }
 });
 
@@ -830,75 +1284,42 @@ apiRouter.post("/customers/cart", (req, res) => {
 });
 
 // 14. File Storage & Media Library for batch images
-const MEDIA_META_FILE = path.join(DATA_DIR, "media_library.json");
-
-interface MediaMetaItem {
-  id: string;
-  name: string;
-  url: string;
-  createdAt: string;
-  size?: number;
-}
-
-function getMediaLibraryMeta(): MediaMetaItem[] {
-  try {
-    if (fs.existsSync(MEDIA_META_FILE)) {
-      return JSON.parse(fs.readFileSync(MEDIA_META_FILE, "utf-8"));
-    }
-  } catch {}
-  return [];
-}
-
-function saveMediaLibraryMeta(items: MediaMetaItem[]) {
-  try {
-    fs.writeFileSync(MEDIA_META_FILE, JSON.stringify(items, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error saving media library meta:", err);
-  }
-}
-
 apiRouter.get("/media-library", (_req, res) => {
   try {
     const metaList = getMediaLibraryMeta();
     const metaMap = new Map<string, MediaMetaItem>(metaList.map((m) => [m.id, m]));
-    const files = fs.readdirSync(UPLOADS_DIR);
-    let changed = false;
+    
+    // Auto-discover files on disk
+    if (fs.existsSync(UPLOADS_DIR)) {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      let changed = false;
 
-    // Scan disk and ensure every file has a meta item
-    for (const file of files) {
-      if (!metaMap.has(file)) {
-        try {
-          const stats = fs.statSync(path.join(UPLOADS_DIR, file));
-          if (stats.isFile()) {
-            const newItem: MediaMetaItem = {
-              id: file,
-              name: `Imagen_${file.slice(0, 8)}.jpg`,
-              url: `/api/storage/objects/${file}`,
-              createdAt: stats.mtime.toISOString(),
-              size: stats.size,
-            };
-            metaMap.set(file, newItem);
-            changed = true;
-          }
-        } catch {}
+      for (const file of files) {
+        if (!metaMap.has(file)) {
+          try {
+            const stats = fs.statSync(path.join(UPLOADS_DIR, file));
+            if (stats.isFile()) {
+              const newItem: MediaMetaItem = {
+                id: file,
+                name: `Imagen_${file.slice(0, 8)}.jpg`,
+                url: `/api/storage/objects/${file}`,
+                createdAt: stats.mtime.toISOString(),
+                size: stats.size,
+              };
+              metaMap.set(file, newItem);
+              changed = true;
+            }
+          } catch {}
+        }
+      }
+
+      if (changed) {
+        saveMediaLibraryMeta(Array.from(metaMap.values()));
       }
     }
 
-    // Clean up items whose files on disk no longer exist
-    const validItems: MediaMetaItem[] = [];
-    for (const [id, item] of metaMap.entries()) {
-      if (fs.existsSync(path.join(UPLOADS_DIR, id))) {
-        validItems.push(item);
-      } else {
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      saveMediaLibraryMeta(validItems);
-    }
-
-    // Sort newest first
+    // Return all items sorted newest first without destructive purging
+    const validItems: MediaMetaItem[] = Array.from(metaMap.values());
     validItems.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     res.json({ images: validItems });
@@ -933,6 +1354,9 @@ apiRouter.post("/media-library/upload-batch", (req, res) => {
 
       const buffer = Buffer.from(base64Data, "base64");
       fs.writeFileSync(filePath, buffer);
+      try {
+        fs.writeFileSync(path.join(SEED_UPLOADS_DIR, fileId), buffer);
+      } catch {}
 
       const metaItem: MediaMetaItem = {
         id: fileId,
@@ -960,6 +1384,12 @@ apiRouter.delete("/media-library/:id", (req, res) => {
   try {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
+    }
+    const seedPath = path.join(SEED_UPLOADS_DIR, fileId);
+    if (fs.existsSync(seedPath)) {
+      try {
+        fs.unlinkSync(seedPath);
+      } catch {}
     }
     const currentMeta = getMediaLibraryMeta().filter((m) => m.id !== fileId);
     saveMediaLibraryMeta(currentMeta);
@@ -1000,6 +1430,10 @@ apiRouter.put("/storage/uploads/:id", (req, res) => {
   writeStream.on("finish", () => {
     try {
       const stats = fs.statSync(filePath);
+      // Auto-mirror to seed uploads so fresh deploys / Git commits preserve the file
+      try {
+        fs.copyFileSync(filePath, path.join(SEED_UPLOADS_DIR, fileId));
+      } catch {}
       const currentMeta = getMediaLibraryMeta();
       const existing = currentMeta.find((m) => m.id === fileId);
       if (existing) {
@@ -1029,7 +1463,16 @@ apiRouter.get("/storage/objects/:id", (req, res) => {
   if (fs.existsSync(filePath)) {
     res.sendFile(filePath);
   } else {
-    res.status(404).json({ error: "Object not found" });
+    // Check seed uploads as fallback
+    const seedPath = path.join(SEED_UPLOADS_DIR, fileId);
+    if (fs.existsSync(seedPath)) {
+      try {
+        fs.copyFileSync(seedPath, filePath);
+      } catch {}
+      res.sendFile(seedPath);
+    } else {
+      res.status(404).json({ error: "Object not found" });
+    }
   }
 });
 
@@ -1041,9 +1484,155 @@ apiRouter.delete("/storage/objects/:id", (req, res) => {
       fs.unlinkSync(filePath);
     } catch {}
   }
+  const seedPath = path.join(SEED_UPLOADS_DIR, fileId);
+  if (fs.existsSync(seedPath)) {
+    try {
+      fs.unlinkSync(seedPath);
+    } catch {}
+  }
   const currentMeta = getMediaLibraryMeta().filter((m) => m.id !== fileId);
   saveMediaLibraryMeta(currentMeta);
   res.json({ ok: true });
+});
+
+// 14b. Full Backup, Restore & Seed Engine (Prevents any data loss across GitHub & Render deploys)
+apiRouter.get("/backup/download", (_req, res) => {
+  try {
+    const dbData = dbManager.getRaw();
+    const mediaList = getMediaLibraryMeta();
+    const uploadsMap: Record<string, string> = {};
+
+    // Collect all uploaded images in base64
+    const filesToRead = new Set<string>();
+    if (fs.existsSync(UPLOADS_DIR)) {
+      for (const f of fs.readdirSync(UPLOADS_DIR)) filesToRead.add(f);
+    }
+    if (fs.existsSync(SEED_UPLOADS_DIR)) {
+      for (const f of fs.readdirSync(SEED_UPLOADS_DIR)) filesToRead.add(f);
+    }
+
+    for (const file of filesToRead) {
+      try {
+        const p = fs.existsSync(path.join(UPLOADS_DIR, file))
+          ? path.join(UPLOADS_DIR, file)
+          : path.join(SEED_UPLOADS_DIR, file);
+        if (fs.statSync(p).isFile()) {
+          const buf = fs.readFileSync(p);
+          uploadsMap[file] = buf.toString("base64");
+        }
+      } catch {}
+    }
+
+    const backupPayload = {
+      app: "fellas_market",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      stats: {
+        productsCount: dbData.products?.length || 0,
+        categoriesCount: dbData.categories?.length || 0,
+        imagesCount: Object.keys(uploadsMap).length,
+      },
+      database: dbData,
+      mediaLibrary: mediaList,
+      uploads: uploadsMap,
+    };
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Disposition", `attachment; filename="fellas_market_backup_${dateStr}.json"`);
+    res.setHeader("Content-Type", "application/json");
+    res.send(JSON.stringify(backupPayload, null, 2));
+  } catch (err) {
+    console.error("Error creating full backup:", err);
+    res.status(500).json({ error: "Failed to generate backup" });
+  }
+});
+
+apiRouter.post("/backup/restore", (req, res) => {
+  try {
+    const { database, mediaLibrary, uploads } = req.body;
+    if (!database || !Array.isArray(database.products)) {
+      res.status(400).json({ error: "Formato de respaldo inválido: faltan los datos del catálogo." });
+      return;
+    }
+
+    // 1. Restore Database
+    dbManager.restoreRaw(database);
+
+    // 2. Restore Media Library
+    if (Array.isArray(mediaLibrary)) {
+      saveMediaLibraryMeta(mediaLibrary);
+    }
+
+    // 3. Unpack all uploaded image files
+    let restoredImages = 0;
+    if (uploads && typeof uploads === "object") {
+      for (const [fileId, base64Data] of Object.entries(uploads)) {
+        if (typeof base64Data === "string" && base64Data.length > 0) {
+          try {
+            let clean = base64Data;
+            if (clean.includes(";base64,")) {
+              clean = clean.split(";base64,")[1];
+            }
+            const buf = Buffer.from(clean, "base64");
+            fs.writeFileSync(path.join(UPLOADS_DIR, fileId), buf);
+            try {
+              fs.writeFileSync(path.join(SEED_UPLOADS_DIR, fileId), buf);
+            } catch {}
+            restoredImages++;
+          } catch {}
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      message: "¡Copia de seguridad restaurada con éxito!",
+      productsCount: database.products.length,
+      imagesCount: restoredImages,
+    });
+  } catch (err) {
+    console.error("Error restoring backup:", err);
+    res.status(500).json({ error: "Error al restaurar el respaldo" });
+  }
+});
+
+apiRouter.post("/backup/bake-seed", (_req, res) => {
+  try {
+    // 1. Bake database
+    const dbData = dbManager.getRaw();
+    const seedDbPath = path.resolve(process.cwd(), "src", "server", "seed_db.json");
+    fs.writeFileSync(seedDbPath, JSON.stringify(dbData, null, 2), "utf-8");
+
+    // 2. Bake media library
+    const mediaList = getMediaLibraryMeta();
+    const seedMediaPath = path.resolve(process.cwd(), "src", "server", "seed_media.json");
+    fs.writeFileSync(seedMediaPath, JSON.stringify(mediaList, null, 2), "utf-8");
+
+    // 3. Bake uploads into seed_uploads
+    let count = 0;
+    if (fs.existsSync(UPLOADS_DIR)) {
+      for (const file of fs.readdirSync(UPLOADS_DIR)) {
+        const src = path.join(UPLOADS_DIR, file);
+        const dest = path.join(SEED_UPLOADS_DIR, file);
+        if (fs.statSync(src).isFile()) {
+          try {
+            fs.copyFileSync(src, dest);
+            count++;
+          } catch {}
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      message: "¡Datos fijados con éxito en el código fuente para GitHub y Render!",
+      productsCount: dbData.products?.length || 0,
+      imagesCount: count,
+    });
+  } catch (err) {
+    console.error("Error baking seed:", err);
+    res.status(500).json({ error: "Error al fijar datos" });
+  }
 });
 
 // 15. Resolve OpenGraph image
