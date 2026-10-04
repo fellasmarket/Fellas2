@@ -1500,6 +1500,34 @@ apiRouter.post("/media-library/upload-batch", (req, res) => {
   }
 });
 
+apiRouter.delete("/media-library/all", (_req, res) => {
+  try {
+    let deletedCount = 0;
+    if (fs.existsSync(UPLOADS_DIR)) {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      for (const file of files) {
+        try {
+          fs.unlinkSync(path.join(UPLOADS_DIR, file));
+          deletedCount++;
+        } catch {}
+      }
+    }
+    if (fs.existsSync(SEED_UPLOADS_DIR)) {
+      const files = fs.readdirSync(SEED_UPLOADS_DIR);
+      for (const file of files) {
+        try {
+          fs.unlinkSync(path.join(SEED_UPLOADS_DIR, file));
+        } catch {}
+      }
+    }
+    saveMediaLibraryMeta([]);
+    res.json({ ok: true, deletedCount });
+  } catch (err: any) {
+    console.error("Delete all media error:", err);
+    res.status(500).json({ error: "Failed to delete all images: " + err.message });
+  }
+});
+
 apiRouter.delete("/media-library/:id", (req, res) => {
   const fileId = req.params.id;
   const filePath = path.join(UPLOADS_DIR, fileId);

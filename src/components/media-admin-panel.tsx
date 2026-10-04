@@ -107,6 +107,34 @@ export const MediaAdminPanel: React.FC = () => {
     }
   };
 
+  const handleDeleteAllImages = async () => {
+    if (images.length === 0) return;
+    const confirmed = confirm(
+      `¿Estás seguro de que deseas eliminar permanentemente TODAS las ${images.length} imágenes del archivo?\n\nEsta acción borrará todas las fotos subidas previamente del almacenamiento.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const res = await fetch(`${apiBase}/media-library/all`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setImages([]);
+        setPreviewImage(null);
+        alert("Se han eliminado todas las imágenes del archivo de medios con éxito.");
+      } else {
+        alert("Error al eliminar las imágenes del archivo.");
+      }
+    } catch (err) {
+      console.error("Error deleting all images:", err);
+      alert("Error de conexión al eliminar las imágenes.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCopyUrl = (url: string, id: string) => {
     navigator.clipboard.writeText(url);
     setCopiedId(id);
@@ -133,7 +161,7 @@ export const MediaAdminPanel: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={fetchImages}
             disabled={loading}
@@ -142,6 +170,19 @@ export const MediaAdminPanel: React.FC = () => {
           >
             <RefreshCw size={18} className={loading ? "animate-spin text-[#ffd025]" : ""} />
           </button>
+
+          {images.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDeleteAllImages}
+              disabled={loading || uploading}
+              className="px-4 py-3.5 rounded-2xl bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-500/30 transition-all font-bold text-xs flex items-center gap-2 cursor-pointer shrink-0 shadow-lg shadow-red-950/40"
+              title="Eliminar todas las imágenes subidas del archivo de medios"
+            >
+              <Trash2 size={16} />
+              <span>Borrar Todas ({images.length})</span>
+            </button>
+          )}
 
           <label
             className={`cursor-pointer px-6 py-3.5 rounded-2xl font-black uppercase text-xs tracking-wider transition-all flex items-center justify-center gap-2 shadow-xl shadow-[#ffd025]/20 shrink-0 ${

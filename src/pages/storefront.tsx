@@ -3094,7 +3094,7 @@ export default function Storefront() {
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="self-start sm:self-auto px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-xs font-bold transition flex items-center gap-1.5 border border-white/10 cursor-pointer"
+                  className="self-start sm:self-auto text-gray-400 hover:text-white text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 border-b border-white/20 hover:border-[#ffd025] pb-0.5 cursor-pointer"
                 >
                   <X size={14} />
                   <span>Limpiar búsqueda</span>
@@ -3313,85 +3313,88 @@ export default function Storefront() {
 
                   return (
                     <div className="space-y-6 mb-12">
-                      {/* BARRA DE FILTROS & ORDENAMIENTO EN PESTAÑA DEDICADA (Sin caja, divididos por líneas) */}
-                      <div className="flex items-center justify-between gap-3 sm:gap-4 py-3 border-y border-white/10 my-4">
-                        {/* Buscador de filtro en tiempo real */}
-                        <div className="flex-1 min-w-0 relative">
-                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      {/* BARRA DE BÚSQUEDA, SUBCATEGORÍAS Y ORDENAMIENTO (OPTIMIZADA PARA MÓVIL Y PC) */}
+                      <div className="w-full border-y border-white/15 py-2.5 my-3 flex items-center justify-between gap-2 sm:gap-4 flex-nowrap">
+                        {/* 1. Buscador: Siempre visible, toma todo el ancho disponible en celular */}
+                        <div className="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2">
+                          <Search size={16} className="text-[#ffd025] shrink-0 opacity-90" />
                           <input
                             type="text"
                             value={dedicatedSearchQuery}
                             onChange={(e) => setDedicatedSearchQuery(e.target.value)}
-                            placeholder="Buscar productos..."
-                            className="w-full bg-[#141422] border border-white/10 rounded-xl pl-8 sm:pl-9 pr-7 sm:pr-8 py-1.5 sm:py-2 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
+                            placeholder="BUSCAR..."
+                            className="w-full bg-transparent text-white text-xs sm:text-sm font-bold uppercase placeholder-gray-500 focus:outline-none tracking-wider truncate"
                           />
                           {dedicatedSearchQuery && (
                             <button
+                              type="button"
                               onClick={() => setDedicatedSearchQuery("")}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1"
+                              className="text-gray-400 hover:text-white p-0.5 shrink-0 transition-colors"
                               aria-label="Limpiar búsqueda"
                             >
-                              <X size={13} />
+                              <X size={14} />
                             </button>
                           )}
                         </div>
 
-                        {/* Línea divisoria vertical */}
-                        <div className="h-6 w-px bg-white/15 shrink-0" />
-
-                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                          {/* Filtro por Subcategoría / Etiqueta */}
+                        {/* Controles laterales: Iconos compactos en celular, completos en PC */}
+                        <div className="flex items-center gap-1.5 sm:gap-5 shrink-0">
+                          {/* 2. Menú / Filtro de Subcategorías */}
                           {availableSubcats.length > 0 && (
-                            <>
-                              <div className="relative">
-                                {/* Versión Celular: Icono compacto con select nativo */}
-                                <div className="sm:hidden relative flex items-center justify-center w-8 h-8 rounded-lg bg-[#141422] border border-white/15 text-[#ffd025]" title="Filtrar por subcategoría">
-                                  <Layers size={15} />
-                                  <select
-                                    value={dedicatedSubcatFilter}
-                                    onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-black"
-                                    aria-label="Filtrar por subcategoría"
-                                  >
-                                    <option value="all">Todas las subcategorías</option>
-                                    {availableSubcats.map((sub) => (
-                                      <option key={sub} value={sub}>{sub}</option>
-                                    ))}
-                                  </select>
-                                </div>
-
-                                {/* Versión PC: Select completo */}
-                                <div className="hidden sm:block">
-                                  <select
-                                    value={dedicatedSubcatFilter}
-                                    onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
-                                    className="bg-[#141422] border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-semibold focus:border-[#ffd025] focus:outline-none cursor-pointer"
-                                  >
-                                    <option value="all">Todas las subcategorías</option>
-                                    {availableSubcats.map((sub) => (
-                                      <option key={sub} value={sub}>{sub}</option>
-                                    ))}
-                                  </select>
-                                </div>
+                            <div className="relative flex items-center shrink-0 border-l border-white/15 pl-1.5 sm:pl-4">
+                              {/* Versión Celular: Solo icono compacto con select nativo */}
+                              <div className="sm:hidden relative flex items-center justify-center p-1.5 text-[#ffd025] hover:text-[#ffe066] cursor-pointer" title="Filtrar por subcategoría">
+                                <Layers size={17} />
+                                {dedicatedSubcatFilter !== "all" && (
+                                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#ffd025] ring-1 ring-black" />
+                                )}
+                                <select
+                                  value={dedicatedSubcatFilter}
+                                  onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-black"
+                                  aria-label="Filtrar por subcategoría"
+                                >
+                                  <option value="all">Todas las subcategorías</option>
+                                  {availableSubcats.map((sub) => (
+                                    <option key={sub} value={sub}>{sub}</option>
+                                  ))}
+                                </select>
                               </div>
 
-                              {/* Línea divisoria vertical */}
-                              <div className="h-6 w-px bg-white/15 shrink-0" />
-                            </>
+                              {/* Versión PC: Selector con etiqueta de texto */}
+                              <div className="hidden sm:flex items-center gap-1.5 text-xs">
+                                <Layers size={14} className="text-[#ffd025] shrink-0" />
+                                <span className="text-gray-400 uppercase text-[10px] font-bold tracking-wider">Subcategoría:</span>
+                                <select
+                                  value={dedicatedSubcatFilter}
+                                  onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
+                                  className="bg-transparent text-white text-xs font-bold uppercase tracking-wider focus:outline-none cursor-pointer border-b border-white/20 hover:border-[#ffd025] pb-0.5 transition-colors"
+                                  aria-label="Filtrar por subcategoría"
+                                >
+                                  <option value="all" className="bg-[#141422] text-white">Todas las subcategorías</option>
+                                  {availableSubcats.map((sub) => (
+                                    <option key={sub} value={sub} className="bg-[#141422] text-white">{sub}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
                           )}
 
-                          {/* Menú de Ordenamiento */}
-                          <div className="relative">
-                            {/* Versión Celular: Icono compacto con select nativo */}
-                            <div className="sm:hidden relative flex items-center justify-center w-8 h-8 rounded-lg bg-[#141422] border border-white/15 text-[#ffd025]" title="Ordenar productos">
-                              <Filter size={15} />
+                          {/* 3. Botón / Menú de Ordenamiento */}
+                          <div className="relative flex items-center shrink-0 border-l border-white/15 pl-1.5 sm:pl-4">
+                            {/* Versión Celular: Solo icono compacto con select nativo */}
+                            <div className="sm:hidden relative flex items-center justify-center p-1.5 text-[#ffd025] hover:text-[#ffe066] cursor-pointer" title="Ordenar productos">
+                              <Filter size={17} />
+                              {dedicatedSortBy !== "default" && (
+                                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#ffd025] ring-1 ring-black" />
+                              )}
                               <select
                                 value={dedicatedSortBy}
                                 onChange={(e) => setDedicatedSortBy(e.target.value as any)}
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-black"
                                 aria-label="Ordenar productos"
                               >
-                                <option value="default">Ordenar: Destacados</option>
+                                <option value="default">Destacados</option>
                                 <option value="price_asc">Precio: Menor a Mayor ⬇️</option>
                                 <option value="price_desc">Precio: Mayor a Menor ⬆️</option>
                                 <option value="name_asc">Nombre: A ➔ Z</option>
@@ -3399,24 +3402,62 @@ export default function Storefront() {
                               </select>
                             </div>
 
-                            {/* Versión PC: Selector con texto e icono */}
-                            <div className="hidden sm:flex items-center gap-1.5 bg-[#141422] border border-white/10 rounded-xl px-2.5 py-1.5 shrink-0">
-                              <Filter size={13} className="text-[#ffd025]" />
+                            {/* Versión PC: Selector con etiqueta de texto */}
+                            <div className="hidden sm:flex items-center gap-1.5 text-xs">
+                              <Filter size={14} className="text-[#ffd025] shrink-0" />
+                              <span className="text-gray-400 uppercase text-[10px] font-bold tracking-wider">Ordenar:</span>
                               <select
                                 value={dedicatedSortBy}
                                 onChange={(e) => setDedicatedSortBy(e.target.value as any)}
-                                className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer"
+                                className="bg-transparent text-white text-xs font-bold uppercase tracking-wider focus:outline-none cursor-pointer border-b border-white/20 hover:border-[#ffd025] pb-0.5 transition-colors"
+                                aria-label="Ordenar productos"
                               >
-                                <option value="default" className="bg-[#1a1a26] text-white">Ordenar: Destacados</option>
-                                <option value="price_asc" className="bg-[#1a1a26] text-white">Precio: Menor a Mayor ⬇️</option>
-                                <option value="price_desc" className="bg-[#1a1a26] text-white">Precio: Mayor a Menor ⬆️</option>
-                                <option value="name_asc" className="bg-[#1a1a26] text-white">Nombre: A ➔ Z</option>
-                                <option value="name_desc" className="bg-[#1a1a26] text-white">Nombre: Z ➔ A</option>
+                                <option value="default" className="bg-[#141422] text-white">Destacados</option>
+                                <option value="price_asc" className="bg-[#141422] text-white">Precio: Menor a Mayor ⬇️</option>
+                                <option value="price_desc" className="bg-[#141422] text-white">Precio: Mayor a Menor ⬆️</option>
+                                <option value="name_asc" className="bg-[#141422] text-white">Nombre: A ➔ Z</option>
+                                <option value="name_desc" className="bg-[#141422] text-white">Nombre: Z ➔ A</option>
                               </select>
                             </div>
                           </div>
                         </div>
                       </div>
+
+                      {/* Lista horizontal rápida de subcategorías con líneas divisorias si existen */}
+                      {availableSubcats.length > 1 && (
+                        <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1.5 -mt-2 border-b border-white/10 scrollbar-none">
+                          <button
+                            type="button"
+                            onClick={() => setDedicatedSubcatFilter("all")}
+                            className={`text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap transition-colors py-0.5 ${
+                              dedicatedSubcatFilter === "all"
+                                ? "text-[#ffd025] font-black border-b-2 border-[#ffd025]"
+                                : "text-gray-400 hover:text-white font-semibold"
+                            }`}
+                          >
+                            Todas ({processed.length})
+                          </button>
+                          {availableSubcats.map((sub) => {
+                            const subCount = processed.filter((p) => (p.subcategory || p.category) === sub).length;
+                            return (
+                              <Fragment key={sub}>
+                                <span className="text-white/15 text-[10px] select-none">•</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setDedicatedSubcatFilter(sub)}
+                                  className={`text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap transition-colors py-0.5 ${
+                                    dedicatedSubcatFilter === sub
+                                      ? "text-[#ffd025] font-black border-b-2 border-[#ffd025]"
+                                      : "text-gray-400 hover:text-white font-semibold"
+                                  }`}
+                                >
+                                  {sub} ({subCount})
+                                </button>
+                              </Fragment>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Header con conteo */}
                       <div className="flex items-center justify-between pb-2 border-b border-white/10">

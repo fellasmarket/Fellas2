@@ -140,6 +140,33 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
     }
   };
 
+  const handleDeleteAllImages = async () => {
+    if (images.length === 0) return;
+    const confirmed = confirm(
+      `¿Estás seguro de que deseas eliminar permanentemente TODAS las ${images.length} imágenes del archivo?\n\nEsta acción borrará todas las fotos subidas previamente del almacenamiento.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const res = await fetch(`${apiBase}/media-library/all`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setImages([]);
+        alert("Se han eliminado todas las imágenes del archivo de medios con éxito.");
+      } else {
+        alert("Error al eliminar las imágenes del archivo.");
+      }
+    } catch (err) {
+      console.error("Error deleting all images:", err);
+      alert("Error de conexión al eliminar las imágenes.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCopyUrl = (url: string, id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard.writeText(url);
@@ -225,8 +252,21 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
             />
           </div>
 
-          {/* Big Batch Upload Button */}
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          {/* Big Batch Upload Button & Delete All */}
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+            {images.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDeleteAllImages}
+                disabled={loading || uploading}
+                className="px-3.5 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-500/30 transition-all font-bold text-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                title="Eliminar todas las imágenes del archivo de medios"
+              >
+                <Trash2 size={15} />
+                <span>Borrar Todas ({images.length})</span>
+              </button>
+            )}
+
             <label
               className={`cursor-pointer px-5 py-2.5 rounded-xl font-black uppercase text-xs tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ffd025]/20 shrink-0 ${
                 uploading
@@ -235,7 +275,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
               }`}
             >
               <Upload size={16} strokeWidth={2.5} />
-              <span>{uploading ? "Subiendo lote..." : "Subir Grupo de Imágenes (Todas de Golpe)"}</span>
+              <span>{uploading ? "Subiendo lote..." : "Subir Grupo de Imágenes"}</span>
               <input
                 ref={fileInputRef}
                 type="file"
