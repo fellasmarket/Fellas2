@@ -1167,6 +1167,44 @@ class DatabaseManager {
     this.save();
   }
 
+  public clearAllProductImages(): number {
+    let count = 0;
+    for (const prod of this.db.products) {
+      if (prod.image) {
+        prod.image = "";
+        count++;
+      }
+    }
+    if (count > 0) {
+      this.save();
+    }
+    return count;
+  }
+
+  public clearProductImageByIdOrUrl(fileIdOrName: string): number {
+    if (!fileIdOrName) return 0;
+    let count = 0;
+    const target = fileIdOrName.trim().toLowerCase();
+    for (const prod of this.db.products) {
+      if (prod.image) {
+        const prodImg = String(prod.image).trim().toLowerCase();
+        if (
+          prodImg === target ||
+          prodImg.includes(target) ||
+          target.includes(prodImg) ||
+          prodImg.endsWith("/" + target)
+        ) {
+          prod.image = "";
+          count++;
+        }
+      }
+    }
+    if (count > 0) {
+      this.save();
+    }
+    return count;
+  }
+
   public reorderProducts(ids: number[]) {
     ids.forEach((id, idx) => {
       const prod = this.db.products.find(p => p.id === id);

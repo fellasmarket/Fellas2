@@ -21,7 +21,11 @@ export interface MediaItem {
   size?: number;
 }
 
-export const MediaAdminPanel: React.FC = () => {
+interface MediaAdminPanelProps {
+  onMediaDeleted?: () => void;
+}
+
+export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted }) => {
   const [images, setImages] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -101,6 +105,7 @@ export const MediaAdminPanel: React.FC = () => {
       if (res.ok) {
         setImages((prev) => prev.filter((img) => img.id !== id));
         if (previewImage?.id === id) setPreviewImage(null);
+        onMediaDeleted?.();
       }
     } catch (err) {
       console.error("Error deleting image:", err);
@@ -110,7 +115,7 @@ export const MediaAdminPanel: React.FC = () => {
   const handleDeleteAllImages = async () => {
     if (images.length === 0) return;
     const confirmed = confirm(
-      `¿Estás seguro de que deseas eliminar permanentemente TODAS las ${images.length} imágenes del archivo?\n\nEsta acción borrará todas las fotos subidas previamente del almacenamiento.`
+      `¿Estás seguro de que deseas eliminar permanentemente TODAS las ${images.length} imágenes del archivo?\n\nEsta acción borrará todas las fotos subidas previamente del almacenamiento y las removerá de los productos que las tengan asignadas.`
     );
     if (!confirmed) return;
 
@@ -123,7 +128,8 @@ export const MediaAdminPanel: React.FC = () => {
       if (res.ok) {
         setImages([]);
         setPreviewImage(null);
-        alert("Se han eliminado todas las imágenes del archivo de medios con éxito.");
+        onMediaDeleted?.();
+        alert("Se han eliminado todas las imágenes del archivo y se han desvinculado de los productos con éxito.");
       } else {
         alert("Error al eliminar las imágenes del archivo.");
       }

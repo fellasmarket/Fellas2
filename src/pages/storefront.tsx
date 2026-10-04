@@ -4745,7 +4745,7 @@ export default function Storefront() {
 
             {/* Main Content Padding */}
             <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-              {adminTab === "media" && <MediaAdminPanel />}
+              {adminTab === "media" && <MediaAdminPanel onMediaDeleted={refreshMenu} />}
               {adminTab === "orders" && <OrdersAdminPanel role={adminRole ?? "full"} />}
 
             {adminTab === "stats" && <StatsAdminPanel />}
@@ -8680,74 +8680,96 @@ export default function Storefront() {
                                   </div>
 
                                   {/* Carrusel / Tira rápida de fotos del archivo dentro de la misma tarjeta */}
-                                  {quickMediaImages.length > 0 && (
-                                    <div className="pt-2.5 border-t border-white/10 space-y-1.5 min-w-0 w-full max-w-full overflow-hidden">
-                                      <div className="flex items-center justify-between min-w-0 max-w-full">
-                                        <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5 truncate">
-                                          <FolderOpen size={12} className="text-[#ffd025] shrink-0" />
-                                          <span className="truncate">Fotos de tu Galería ({quickMediaImages.length}) — Clic para asignar directo:</span>
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={() => setMediaPickerOpen(true)}
-                                          className="text-[10px] text-[#ffd025] hover:text-[#ffe066] font-bold flex items-center gap-1 cursor-pointer transition hover:underline shrink-0 ml-2"
-                                        >
-                                          <span>Pantalla Completa</span>
-                                          <ExternalLink size={10} />
-                                        </button>
-                                      </div>
+                                  {(() => {
+                                    const availableQuickImages = quickMediaImages.filter((img) => {
+                                      if (formState.image) {
+                                        const cleanCur = String(formState.image).trim().toLowerCase();
+                                        const cleanUrl = String(img.url).trim().toLowerCase();
+                                        const cleanId = String(img.id).trim().toLowerCase();
+                                        if (cleanCur === cleanUrl || cleanCur === cleanId || cleanCur.includes(cleanId)) return true;
+                                      }
+                                      return !products.some((p) => {
+                                        if (editingProduct && p.id === editingProduct) return false;
+                                        if (!p.image) return false;
+                                        const pImg = String(p.image).trim().toLowerCase();
+                                        const imgUrl = String(img.url).trim().toLowerCase();
+                                        const imgId = String(img.id).trim().toLowerCase();
+                                        const imgName = String(img.name).trim().toLowerCase();
+                                        return pImg === imgUrl || pImg === imgId || pImg.includes(imgId) || pImg === imgName || pImg.endsWith("/" + imgId);
+                                      });
+                                    });
 
-                                      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 custom-admin-scrollbar min-w-0 w-full max-w-full scroll-smooth">
-                                        {quickMediaImages.slice(0, 25).map((img) => {
-                                          const isSelected = formState.image === img.url;
-                                          return (
-                                            <button
-                                              key={img.id}
-                                              type="button"
-                                              onClick={() => {
-                                                setFormState((prev) => ({ ...prev, image: img.url }));
-                                                showToast("Foto asignada desde la galería");
-                                              }}
-                                              title={img.name}
-                                              className={`relative w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black/60 border-2 shrink-0 transition-all cursor-pointer group ${
-                                                isSelected
-                                                  ? "border-[#ffd025] ring-2 ring-[#ffd025]/50 scale-105 shadow-md shadow-[#ffd025]/20"
-                                                  : "border-white/15 hover:border-[#ffd025]"
-                                              }`}
-                                            >
-                                              <img
-                                                src={img.url}
-                                                alt={img.name}
-                                                className="w-full h-full object-contain p-1"
-                                                loading="lazy"
-                                                onError={(e) => {
-                                                  (e.currentTarget as HTMLImageElement).src =
-                                                    "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                    if (availableQuickImages.length === 0 && quickMediaImages.length === 0) return null;
+
+                                    return (
+                                      <div className="pt-2.5 border-t border-white/10 space-y-1.5 min-w-0 w-full max-w-full overflow-hidden">
+                                        <div className="flex items-center justify-between min-w-0 max-w-full">
+                                          <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                                            <FolderOpen size={12} className="text-[#ffd025] shrink-0" />
+                                            <span className="truncate">Fotos Disponibles ({availableQuickImages.length}) — Clic para asignar:</span>
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => setMediaPickerOpen(true)}
+                                            className="text-[10px] text-[#ffd025] hover:text-[#ffe066] font-bold flex items-center gap-1 cursor-pointer transition hover:underline shrink-0 ml-2"
+                                          >
+                                            <span>Pantalla Completa</span>
+                                            <ExternalLink size={10} />
+                                          </button>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 custom-admin-scrollbar min-w-0 w-full max-w-full scroll-smooth">
+                                          {availableQuickImages.slice(0, 25).map((img) => {
+                                            const isSelected = formState.image === img.url;
+                                            return (
+                                              <button
+                                                key={img.id}
+                                                type="button"
+                                                onClick={() => {
+                                                  setFormState((prev) => ({ ...prev, image: img.url }));
+                                                  showToast("Foto asignada desde la galería");
                                                 }}
-                                              />
-                                              {isSelected && (
-                                                <div className="absolute inset-0 bg-[#ffd025]/30 flex items-center justify-center">
-                                                  <div className="w-4 h-4 rounded-full bg-[#ffd025] text-black flex items-center justify-center shadow-md">
-                                                    <Check size={11} strokeWidth={3} />
+                                                title={img.name}
+                                                className={`relative w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black/60 border-2 shrink-0 transition-all cursor-pointer group ${
+                                                  isSelected
+                                                    ? "border-[#ffd025] ring-2 ring-[#ffd025]/50 scale-105 shadow-md shadow-[#ffd025]/20"
+                                                    : "border-white/15 hover:border-[#ffd025]"
+                                                }`}
+                                              >
+                                                <img
+                                                  src={img.url}
+                                                  alt={img.name}
+                                                  className="w-full h-full object-contain p-1"
+                                                  loading="lazy"
+                                                  onError={(e) => {
+                                                    (e.currentTarget as HTMLImageElement).src =
+                                                      "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                                  }}
+                                                />
+                                                {isSelected && (
+                                                  <div className="absolute inset-0 bg-[#ffd025]/30 flex items-center justify-center">
+                                                    <div className="w-4 h-4 rounded-full bg-[#ffd025] text-black flex items-center justify-center shadow-md">
+                                                      <Check size={11} strokeWidth={3} />
+                                                    </div>
                                                   </div>
-                                                </div>
-                                              )}
-                                            </button>
-                                          );
-                                        })}
+                                                )}
+                                              </button>
+                                            );
+                                          })}
 
-                                        <button
-                                          type="button"
-                                          onClick={() => setMediaPickerOpen(true)}
-                                          className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-white/20 hover:border-[#ffd025] text-gray-400 hover:text-[#ffd025] flex flex-col items-center justify-center gap-0.5 shrink-0 transition text-[9px] font-bold uppercase cursor-pointer bg-white/5"
-                                          title="Ver todas las fotos o subir nuevas"
-                                        >
-                                          <FolderOpen size={13} />
-                                          <span>Más</span>
-                                        </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setMediaPickerOpen(true)}
+                                            className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-white/20 hover:border-[#ffd025] text-gray-400 hover:text-[#ffd025] flex flex-col items-center justify-center gap-0.5 shrink-0 transition text-[9px] font-bold uppercase cursor-pointer bg-white/5"
+                                            title="Ver todas las fotos o subir nuevas"
+                                          >
+                                            <FolderOpen size={13} />
+                                            <span>Más</span>
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             </div>
@@ -9016,6 +9038,14 @@ export default function Storefront() {
                         <MediaLibraryModal
                           isOpen={mediaPickerOpen}
                           onClose={() => setMediaPickerOpen(false)}
+                          onMediaDeleted={refreshMenu}
+                          assignedImages={
+                            products
+                              .filter((p) => (editingProduct ? p.id !== editingProduct : true))
+                              .map((p) => p.image)
+                              .filter(Boolean) as string[]
+                          }
+                          currentImage={formState.image}
                           onSelectImage={(url) => {
                             setFormState((prev) => ({ ...prev, image: url }));
                             showToast("Foto seleccionada desde la galería");

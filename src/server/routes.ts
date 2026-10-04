@@ -1517,11 +1517,16 @@ apiRouter.delete("/media-library/all", (_req, res) => {
       for (const file of files) {
         try {
           fs.unlinkSync(path.join(SEED_UPLOADS_DIR, file));
+          deletedCount++;
         } catch {}
       }
     }
     saveMediaLibraryMeta([]);
-    res.json({ ok: true, deletedCount });
+    
+    // Eliminar también las referencias de fotos de TODOS los productos
+    const productsCleared = dbManager.clearAllProductImages();
+
+    res.json({ ok: true, deletedCount, productsCleared });
   } catch (err: any) {
     console.error("Delete all media error:", err);
     res.status(500).json({ error: "Failed to delete all images: " + err.message });
@@ -1532,6 +1537,9 @@ apiRouter.delete("/media-library/:id", (req, res) => {
   const fileId = req.params.id;
   const filePath = path.join(UPLOADS_DIR, fileId);
   try {
+    const metaList = getMediaLibraryMeta();
+    const targetMeta = metaList.find((m) => m.id === fileId);
+
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
@@ -1541,9 +1549,19 @@ apiRouter.delete("/media-library/:id", (req, res) => {
         fs.unlinkSync(seedPath);
       } catch {}
     }
-    const currentMeta = getMediaLibraryMeta().filter((m) => m.id !== fileId);
+    const currentMeta = metaList.filter((m) => m.id !== fileId);
     saveMediaLibraryMeta(currentMeta);
-    res.json({ ok: true });
+
+    // Eliminar la foto de los productos que tengan asignada esta imagen
+    let productsCleared = dbManager.clearProductImageByIdOrUrl(fileId);
+    if (targetMeta?.name) {
+      productsCleared += dbManager.clearProductImageByIdOrUrl(targetMeta.name);
+    }
+    if (targetMeta?.url) {
+      productsCleared += dbManager.clearProductImageByIdOrUrl(targetMeta.url);
+    }
+
+    res.json({ ok: true, productsCleared });
   } catch (err) {
     console.error("Delete media error:", err);
     res.status(500).json({ error: "Failed to delete image" });

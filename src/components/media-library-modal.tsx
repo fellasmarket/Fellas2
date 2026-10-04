@@ -12,6 +12,8 @@ import {
   FolderOpen,
   Sparkles,
   ExternalLink,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { uploadImagesBatch } from "../lib/image-batch-uploader";
 
@@ -27,6 +29,9 @@ interface MediaLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectImage?: (url: string) => void;
+  onMediaDeleted?: () => void;
+  assignedImages?: string[];
+  currentImage?: string;
   title?: string;
 }
 
@@ -34,6 +39,9 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   isOpen,
   onClose,
   onSelectImage,
+  onMediaDeleted,
+  assignedImages = [],
+  currentImage = "",
   title = "Archivo y Galería de Imágenes",
 }) => {
   const [images, setImages] = useState<MediaItem[]>([]);
@@ -43,6 +51,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   const [uploadPercent, setUploadPercent] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [hideAssigned, setHideAssigned] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchImages = async () => {
@@ -134,6 +143,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
       });
       if (res.ok) {
         setImages((prev) => prev.filter((img) => img.id !== id));
+        onMediaDeleted?.();
       }
     } catch (err) {
       console.error("Error deleting image:", err);
@@ -143,7 +153,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   const handleDeleteAllImages = async () => {
     if (images.length === 0) return;
     const confirmed = confirm(
-      `¿Estás seguro de que deseas eliminar permanentemente TODAS las ${images.length} imágenes del archivo?\n\nEsta acción borrará todas las fotos subidas previamente del almacenamiento.`
+      `¿Estás seguro de que deseas eliminar permanentemente TODAS las ${images.length} imágenes del archivo?\n\nEsta acción borrará todas las fotos subidas previamente del almacenamiento y las removerá de los productos que las tengan asignadas.`
     );
     if (!confirmed) return;
 
@@ -155,7 +165,8 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
       });
       if (res.ok) {
         setImages([]);
-        alert("Se han eliminado todas las imágenes del archivo de medios con éxito.");
+        onMediaDeleted?.();
+        alert("Se han eliminado todas las imágenes del archivo de medios y de los productos con éxito.");
       } else {
         alert("Error al eliminar las imágenes del archivo.");
       }
@@ -174,9 +185,43 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const filteredImages = images.filter((img) =>
-    img.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const isImageAssigned = (img: MediaItem) => {
+    if (!assignedImages || assignedImages.length === 0) return false;
+    return assignedImages.some((assigned) => {
+      if (!assigned) return false;
+      const cleanAssigned = String(assigned).trim().toLowerCase();
+      const cleanUrl = String(img.url).trim().toLowerCase();
+      const cleanId = String(img.id).trim().toLowerCase();
+      const cleanName = String(img.name).trim().toLowerCase();
+      return (
+        cleanAssigned === cleanUrl ||
+        cleanAssigned === cleanId ||
+        cleanAssigned.includes(cleanId) ||
+        cleanAssigned === cleanName ||
+        cleanAssigned.endsWith("/" + cleanId)
+      );
+    });
+  };
+
+  const assignedCount = images.filter(isImageAssigned).length;
+
+  const filteredImages = images.filter((img) => {
+    const matchesSearch = img.name.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (hideAssigned && isImageAssigned(img)) {
+      // Si esta imagen coincide con la que ya tiene asignada este producto en particular, la mostramos para permitir conservarla
+      if (currentImage) {
+        const cleanCurrent = String(currentImage).trim().toLowerCase();
+        const cleanUrl = String(img.url).trim().toLowerCase();
+        const cleanId = String(img.id).trim().toLowerCase();
+        if (cleanCurrent === cleanUrl || cleanCurrent === cleanId || cleanCurrent.includes(cleanId)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return true;
+  });
 
   const modalNode = (
     <div
@@ -240,16 +285,34 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
 
         {/* Action Controls & Batch Uploader */}
         <div className="p-4 sm:p-5 border-b border-white/10 bg-[#141422] flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0">
-          {/* Search Box */}
-          <div className="relative w-full sm:w-72">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por nombre..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-[#0c0c14] border border-white/10 rounded-xl text-white text-xs focus:border-[#ffd025] focus:outline-none"
-            />
+          {/* Search Box & Assigned Filter Toggle */}
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-[#0c0c14] border border-white/10 rounded-xl text-white text-xs focus:border-[#ffd025] focus:outline-none"
+              />
+            </div>
+
+            {assignedCount > 0 && onSelectImage && (
+              <button
+                type="button"
+                onClick={() => setHideAssigned(!hideAssigned)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border cursor-pointer shrink-0 ${
+                  hideAssigned
+                    ? "bg-[#ffd025]/15 text-[#ffd025] border-[#ffd025]/30 hover:bg-[#ffd025]/25"
+                    : "bg-white/5 text-gray-400 border-white/10 hover:text-white"
+                }`}
+                title={hideAssigned ? "Mostrando solo fotos libres (sin asignar a otros productos)" : "Mostrando todas las fotos"}
+              >
+                {hideAssigned ? <EyeOff size={14} /> : <Eye size={14} />}
+                <span>{hideAssigned ? `Ocultando ${assignedCount} ya asignadas` : `Ver todas (${assignedCount} asignadas)`}</span>
+              </button>
+            )}
           </div>
 
           {/* Big Batch Upload Button & Delete All */}
@@ -355,6 +418,13 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                 >
                   {/* Image Aspect Box */}
                   <div className="relative aspect-square w-full bg-[#09090f] overflow-hidden flex items-center justify-center">
+                    {isImageAssigned(img) && (
+                      <div className="absolute top-2 left-2 z-10 pointer-events-none">
+                        <span className="px-1.5 py-0.5 rounded-md bg-black/85 border border-[#ffd025]/50 text-[#ffd025] text-[8.5px] font-black uppercase tracking-wider shadow-md">
+                          Ya Asignada
+                        </span>
+                      </div>
+                    )}
                     <img
                       src={img.url}
                       alt={img.name}
