@@ -23,6 +23,8 @@ import {
   Package,
   Layers,
   Bot,
+  Zap,
+  Droplets,
 } from "lucide-react";
 import { uploadImagesBatch } from "../lib/image-batch-uploader";
 
@@ -46,11 +48,13 @@ export const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "Cervezas": <Beer size={16} className="text-yellow-400" />,
   "Vinos & Espumantes": <Wine size={16} className="text-purple-400" />,
   "Destilados & Licores": <GlassWater size={16} className="text-cyan-400" />,
-  "Bebidas & Energéticas": <GlassWater size={16} className="text-emerald-400" />,
-  "Cigarros & Vapes": <Cigarette size={16} className="text-orange-400" />,
-  "Snacks & Piqueos": <Cookie size={16} className="text-amber-500" />,
+  "Energizantes": <Zap size={16} className="text-lime-400" />,
+  "Bebidas & Gaseosas": <GlassWater size={16} className="text-emerald-400" />,
+  "Jugos & Aguas": <Droplets size={16} className="text-blue-400" />,
+  "Cigarros & Tabacos": <Cigarette size={16} className="text-orange-400" />,
+  "Snacks & Salados": <Cookie size={16} className="text-amber-500" />,
   "Dulces & Chocolates": <Candy size={16} className="text-pink-400" />,
-  "Hielo & Abarrotes": <Package size={16} className="text-blue-400" />,
+  "Hielo & Abarrotes": <Package size={16} className="text-blue-300" />,
   "Otros / General": <FolderOpen size={16} className="text-gray-400" />,
 };
 
@@ -60,9 +64,11 @@ export const ORDERED_SECTIONS = [
   "Cervezas",
   "Vinos & Espumantes",
   "Destilados & Licores",
-  "Bebidas & Energéticas",
-  "Cigarros & Vapes",
-  "Snacks & Piqueos",
+  "Energizantes",
+  "Bebidas & Gaseosas",
+  "Jugos & Aguas",
+  "Cigarros & Tabacos",
+  "Snacks & Salados",
   "Dulces & Chocolates",
   "Hielo & Abarrotes",
   "Otros / General",
