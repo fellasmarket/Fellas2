@@ -227,6 +227,25 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleUpdateCategory = async (id: string, newCategory: string, e?: React.ChangeEvent<HTMLSelectElement>) => {
+    e?.stopPropagation();
+    try {
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const res = await fetch(`${apiBase}/media-library/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: newCategory }),
+      });
+      if (res.ok) {
+        setImages((prev) =>
+          prev.map((img) => (img.id === id ? { ...img, category: newCategory } : img))
+        );
+      }
+    } catch (err) {
+      console.error("Error updating image category:", err);
+    }
+  };
+
   const isImageAssigned = (img: MediaItem) => {
     if (!assignedImages || assignedImages.length === 0) return false;
     return assignedImages.some((assigned) => {
@@ -709,16 +728,29 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                               </div>
 
                               {/* Card Meta & Title */}
-                              <div className="p-2 border-t border-white/5 bg-[#12121e] flex flex-col justify-between">
+                              <div className="p-2 border-t border-white/5 bg-[#12121e] flex flex-col justify-between space-y-1" onClick={(e) => e.stopPropagation()}>
                                 <p className="text-[11px] font-bold text-gray-200 truncate" title={img.name}>
                                   {img.name}
                                 </p>
                                 {img.aiDetectedTitle && (
-                                  <p className="text-[9.5px] text-[#ffd025] truncate font-medium flex items-center gap-1 mt-0.5">
+                                  <p className="text-[9.5px] text-[#ffd025] truncate font-medium flex items-center gap-1">
                                     <Sparkles size={10} className="shrink-0" />
                                     <span className="truncate">{img.aiDetectedTitle}</span>
                                   </p>
                                 )}
+                                <select
+                                  value={img.category || secName}
+                                  onChange={(e) => handleUpdateCategory(img.id, e.target.value, e)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full bg-[#0c0c14] border border-white/10 rounded-lg px-1.5 py-0.5 text-[9px] font-semibold text-gray-300 focus:border-[#ffd025] focus:outline-none cursor-pointer"
+                                  title="Mover foto a otra sección"
+                                >
+                                  {ORDERED_SECTIONS.map((s) => (
+                                    <option key={s} value={s} className="bg-[#141422] text-white">
+                                      {s}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             </div>
                           );

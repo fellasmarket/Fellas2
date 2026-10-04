@@ -52,44 +52,250 @@ export interface MediaMetaItem {
   aiDetectedTitle?: string;
 }
 
-export function normalizeCategoryMatch(catStr: string): ProductImageSection {
-  if (!catStr) return "Otros / General";
-  const norm = catStr.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+export function normalizeCategoryMatch(catStr: string, titleStr: string = ""): ProductImageSection {
+  const catNorm = String(catStr || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const titleNorm = String(titleStr || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const combined = `${catNorm} ${titleNorm}`;
 
-  if (norm.includes("promo") || norm.includes("pack") || norm.includes("combo") || norm.includes("oferta")) {
+  if (!combined.trim()) return "Otros / General";
+
+  // 1. Promociones & Packs (if combo/pack/promo)
+  if (
+    combined.includes("promo") ||
+    combined.includes("pack") ||
+    combined.includes("combo") ||
+    combined.includes("oferta") ||
+    (combined.includes("pisco") && combined.includes("bebida")) ||
+    (combined.includes("whisky") && combined.includes("bebida")) ||
+    (combined.includes("ron") && combined.includes("bebida")) ||
+    (combined.includes("vodka") && combined.includes("bebida"))
+  ) {
     return "Promociones & Packs";
   }
-  if (norm.includes("pisco")) {
-    return "Piscos";
-  }
-  if (norm.includes("cerveza") || norm.includes("beer") || norm.includes("schop") || norm.includes("sixpack") || norm.includes("lager") || norm.includes("ipa")) {
+
+  // 2. Cervezas (MUST check before generic drinks or waters)
+  if (
+    combined.includes("cerveza") ||
+    combined.includes("beer") ||
+    combined.includes("schop") ||
+    combined.includes("sixpack") ||
+    combined.includes("twelvepack") ||
+    combined.includes("cristal") ||
+    combined.includes("escudo") ||
+    combined.includes("heineken") ||
+    combined.includes("stella") ||
+    combined.includes("budweiser") ||
+    combined.includes("coronita") ||
+    combined.includes("corona") ||
+    combined.includes("becker") ||
+    combined.includes("kunstmann") ||
+    combined.includes("austral") ||
+    combined.includes("royal guard") ||
+    combined.includes("kross") ||
+    combined.includes("baltica") ||
+    combined.includes("lager") ||
+    combined.includes("ipa") ||
+    combined.includes("pilsen") ||
+    combined.includes("cuello negro")
+  ) {
     return "Cervezas";
   }
-  if (norm.includes("vino") || norm.includes("wine") || norm.includes("espumante") || norm.includes("champagne") || norm.includes("tinto") || norm.includes("blanco") || norm.includes("carmenere") || norm.includes("cabernet")) {
+
+  // 3. Piscos (MUST check before generic drinks or waters)
+  if (
+    combined.includes("pisco") ||
+    combined.includes("mistral") ||
+    combined.includes("alto del carmen") ||
+    combined.includes("altodelcarmen") ||
+    combined.includes("campanario") ||
+    combined.includes("capel") ||
+    combined.includes("horcon") ||
+    combined.includes("bauza") ||
+    combined.includes("control c") ||
+    combined.includes("malpaso") ||
+    combined.includes("tres erres")
+  ) {
+    return "Piscos";
+  }
+
+  // 4. Vinos & Espumantes
+  if (
+    combined.includes("vino") ||
+    combined.includes("wine") ||
+    combined.includes("espumante") ||
+    combined.includes("champagne") ||
+    combined.includes("prosecco") ||
+    combined.includes("cava") ||
+    combined.includes("tinto") ||
+    combined.includes("blanco") ||
+    combined.includes("carmenere") ||
+    combined.includes("cabernet") ||
+    combined.includes("merlot") ||
+    combined.includes("chardonnay") ||
+    combined.includes("sauvignon") ||
+    combined.includes("casillero") ||
+    combined.includes("gato negro") ||
+    combined.includes("gatonegro") ||
+    combined.includes("santa rita") ||
+    combined.includes("concha y toro") ||
+    combined.includes("undurraga") ||
+    combined.includes("valdivieso") ||
+    combined.includes("riccadonna") ||
+    combined.includes("chandon") ||
+    combined.includes("misiones de rengo")
+  ) {
     return "Vinos & Espumantes";
   }
-  if (norm.includes("energizan") || norm.includes("energy") || norm.includes("monster") || norm.includes("red bull") || norm.includes("redbull") || norm.includes("score")) {
-    return "Energizantes";
-  }
-  if (norm.includes("jugo") || norm.includes("agua") || norm.includes("nectar") || norm.includes("mineral") || norm.includes("cachantun") || norm.includes("benedicto") || norm.includes("vital")) {
-    return "Jugos & Aguas";
-  }
-  if (norm.includes("bebida") || norm.includes("gaseosa") || norm.includes("soda") || norm.includes("coca") || norm.includes("sprite") || norm.includes("fanta") || norm.includes("pepsi") || norm.includes("kem") || norm.includes("bilz") || norm.includes("pap") || norm.includes("tonica") || norm.includes("ginger")) {
-    return "Bebidas & Gaseosas";
-  }
-  if (norm.includes("whisky") || norm.includes("whiskey") || norm.includes("ron") || norm.includes("vodka") || norm.includes("gin") || norm.includes("tequila") || norm.includes("licor") || norm.includes("destilado") || norm.includes("fernet") || norm.includes("jager") || norm.includes("baileys") || norm.includes("aperol") || norm.includes("campari") || norm.includes("ramazzotti")) {
+
+  // 5. Destilados & Licores
+  if (
+    combined.includes("whisky") ||
+    combined.includes("whiskey") ||
+    combined.includes("ron") ||
+    combined.includes("vodka") ||
+    combined.includes("gin") ||
+    combined.includes("tequila") ||
+    combined.includes("licor") ||
+    combined.includes("destilado") ||
+    combined.includes("fernet") ||
+    combined.includes("jager") ||
+    combined.includes("baileys") ||
+    combined.includes("aperol") ||
+    combined.includes("campari") ||
+    combined.includes("ramazzotti") ||
+    combined.includes("absolut") ||
+    combined.includes("smirnoff") ||
+    combined.includes("jack daniel") ||
+    combined.includes("johnnie") ||
+    combined.includes("chivas") ||
+    combined.includes("ballantine") ||
+    combined.includes("bacardi") ||
+    combined.includes("havana")
+  ) {
     return "Destilados & Licores";
   }
-  if (norm.includes("cigarro") || norm.includes("cigar") || norm.includes("tabaco") || norm.includes("vape") || norm.includes("pod") || norm.includes("pall mall") || norm.includes("lucky") || norm.includes("marlboro") || norm.includes("kent") || norm.includes("papelillo") || norm.includes("encendedor")) {
+
+  // 6. Energizantes
+  if (
+    combined.includes("energiz") ||
+    combined.includes("energetica") ||
+    combined.includes("energy") ||
+    combined.includes("monster") ||
+    combined.includes("red bull") ||
+    combined.includes("redbull") ||
+    combined.includes("score") ||
+    combined.includes("mr big") ||
+    combined.includes("mrbig") ||
+    combined.includes("volt") ||
+    combined.includes("rockstar")
+  ) {
+    return "Energizantes";
+  }
+
+  // 7. Cigarros & Tabacos
+  if (
+    combined.includes("cigarro") ||
+    combined.includes("cigar") ||
+    combined.includes("tabaco") ||
+    combined.includes("vape") ||
+    combined.includes("pod") ||
+    combined.includes("pall mall") ||
+    combined.includes("lucky") ||
+    combined.includes("marlboro") ||
+    combined.includes("kent") ||
+    combined.includes("dunhill") ||
+    combined.includes("belmont") ||
+    combined.includes("papelillo") ||
+    combined.includes("encendedor")
+  ) {
     return "Cigarros & Tabacos";
   }
-  if (norm.includes("snack") || norm.includes("papa") || norm.includes("ramita") || norm.includes("dorito") || norm.includes("cheeto") || norm.includes("mani") || norm.includes("frutos secos") || norm.includes("aceituna") || norm.includes("piqueo") || norm.includes("nacho") || norm.includes("salado")) {
+
+  // 8. Snacks & Salados
+  if (
+    combined.includes("snack") ||
+    combined.includes("papa") ||
+    combined.includes("lays") ||
+    combined.includes("ramita") ||
+    combined.includes("dorito") ||
+    combined.includes("cheeto") ||
+    combined.includes("mani") ||
+    combined.includes("frutos secos") ||
+    combined.includes("aceituna") ||
+    combined.includes("piqueo") ||
+    combined.includes("kryzpo") ||
+    combined.includes("pringles") ||
+    combined.includes("tika")
+  ) {
     return "Snacks & Salados";
   }
-  if (norm.includes("dulce") || norm.includes("chocolate") || norm.includes("galleta") || norm.includes("gomita") || norm.includes("caramelo") || norm.includes("alfajor") || norm.includes("bombom") || norm.includes("sahne") || norm.includes("vizzio") || norm.includes("trencito") || norm.includes("super 8") || norm.includes("golosina")) {
+
+  // 9. Dulces & Chocolates
+  if (
+    combined.includes("dulce") ||
+    combined.includes("chocolate") ||
+    combined.includes("galleta") ||
+    combined.includes("gomita") ||
+    combined.includes("caramelo") ||
+    combined.includes("alfajor") ||
+    combined.includes("sahne") ||
+    combined.includes("vizzio") ||
+    combined.includes("trencito") ||
+    combined.includes("super 8") ||
+    combined.includes("chocman") ||
+    combined.includes("oreo") ||
+    combined.includes("triton") ||
+    combined.includes("golosina")
+  ) {
     return "Dulces & Chocolates";
   }
-  if (norm.includes("hielo") || norm.includes("ice") || norm.includes("carbon") || norm.includes("vaso") || norm.includes("servilleta") || norm.includes("abarrote") || norm.includes("despensa")) {
+
+  // 10. Jugos & Aguas (ONLY if truly juice or water)
+  if (
+    combined.includes("jugo") ||
+    combined.includes("nectar") ||
+    combined.includes("watts") ||
+    combined.includes("andina") ||
+    combined.includes("vivo") ||
+    combined.includes("agua mineral") ||
+    combined.includes("cachantun") ||
+    combined.includes("benedicto") ||
+    combined.includes("vital") ||
+    combined.includes("puyehue") ||
+    combined.includes("agua sin gas") ||
+    combined.includes("agua con gas")
+  ) {
+    return "Jugos & Aguas";
+  }
+
+  // 11. Bebidas & Gaseosas
+  if (
+    combined.includes("bebida") ||
+    combined.includes("gaseosa") ||
+    combined.includes("soda") ||
+    combined.includes("coca") ||
+    combined.includes("sprite") ||
+    combined.includes("fanta") ||
+    combined.includes("pepsi") ||
+    combined.includes("kem") ||
+    combined.includes("bilz") ||
+    combined.includes("pap") ||
+    combined.includes("ginger") ||
+    combined.includes("tonica")
+  ) {
+    return "Bebidas & Gaseosas";
+  }
+
+  // 12. Hielo & Abarrotes
+  if (
+    combined.includes("hielo") ||
+    combined.includes("ice") ||
+    combined.includes("carbon") ||
+    combined.includes("vaso") ||
+    combined.includes("servilleta") ||
+    combined.includes("abarrote") ||
+    combined.includes("despensa")
+  ) {
     return "Hielo & Abarrotes";
   }
 
@@ -472,7 +678,7 @@ Responde ÚNICAMENTE en formato JSON válido:
     });
 
     const parsed = JSON.parse(response.text || "{}");
-    const matchedCategory = normalizeCategoryMatch(parsed.category || "");
+    const matchedCategory = normalizeCategoryMatch(parsed.category || "", parsed.title || "");
     if (matchedCategory) {
       return {
         category: matchedCategory,
