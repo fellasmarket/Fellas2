@@ -24,12 +24,357 @@ if (!fs.existsSync(SEED_UPLOADS_DIR)) {
   fs.mkdirSync(SEED_UPLOADS_DIR, { recursive: true });
 }
 
+export const PRODUCT_IMAGE_SECTIONS = [
+  "Promociones & Packs",
+  "Piscos",
+  "Cervezas",
+  "Vinos & Espumantes",
+  "Destilados & Licores",
+  "Bebidas & Energéticas",
+  "Cigarros & Vapes",
+  "Snacks & Piqueos",
+  "Dulces & Chocolates",
+  "Hielo & Abarrotes",
+  "Otros / General",
+] as const;
+
+export type ProductImageSection = (typeof PRODUCT_IMAGE_SECTIONS)[number];
+
 export interface MediaMetaItem {
   id: string;
   name: string;
   url: string;
   createdAt: string;
   size?: number;
+  category?: string;
+  aiDetectedTitle?: string;
+}
+
+export function classifyImageHeuristic(filename: string): { category: ProductImageSection; title?: string } {
+  const norm = String(filename || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // Promociones & Packs (ej: combo pisco + bebida + hielo, pack promo)
+  if (
+    norm.includes("pack") ||
+    norm.includes("combo") ||
+    norm.includes("promo") ||
+    norm.includes("oferta") ||
+    (norm.includes("pisco") && norm.includes("bebida")) ||
+    (norm.includes("whisky") && norm.includes("bebida")) ||
+    (norm.includes("ron") && norm.includes("bebida")) ||
+    (norm.includes("vodka") && norm.includes("bebida")) ||
+    (norm.includes("hielo") && (norm.includes("pisco") || norm.includes("bebida") || norm.includes("whisky")))
+  ) {
+    return { category: "Promociones & Packs" };
+  }
+
+  // Piscos
+  if (
+    norm.includes("pisco") ||
+    norm.includes("mistral") ||
+    norm.includes("alto del carmen") ||
+    norm.includes("altodelcarmen") ||
+    norm.includes("campanario") ||
+    norm.includes("capel") ||
+    norm.includes("horcon") ||
+    norm.includes("tres erres") ||
+    norm.includes("3 erres") ||
+    norm.includes("control c") ||
+    norm.includes("bauza") ||
+    norm.includes("mal paso") ||
+    norm.includes("waqar")
+  ) {
+    return { category: "Piscos" };
+  }
+
+  // Cervezas
+  if (
+    norm.includes("cerveza") ||
+    norm.includes("beer") ||
+    norm.includes("cristal") ||
+    norm.includes("escudo") ||
+    norm.includes("corona") ||
+    norm.includes("coronita") ||
+    norm.includes("heineken") ||
+    norm.includes("stella") ||
+    norm.includes("budweiser") ||
+    norm.includes("royal") ||
+    norm.includes("austral") ||
+    norm.includes("kunstmann") ||
+    norm.includes("becker") ||
+    norm.includes("cusquena") ||
+    norm.includes("sol") ||
+    norm.includes("miller") ||
+    norm.includes("coors") ||
+    norm.includes("kross") ||
+    norm.includes("baltica") ||
+    norm.includes("schop") ||
+    norm.includes("ipa") ||
+    norm.includes("lager")
+  ) {
+    return { category: "Cervezas" };
+  }
+
+  // Vinos & Espumantes
+  if (
+    norm.includes("vino") ||
+    norm.includes("wine") ||
+    norm.includes("espumante") ||
+    norm.includes("champagne") ||
+    norm.includes("prosecco") ||
+    norm.includes("cava") ||
+    norm.includes("tinto") ||
+    norm.includes("blanco") ||
+    norm.includes("cabernet") ||
+    norm.includes("carmenere") ||
+    norm.includes("merlot") ||
+    norm.includes("chardonnay") ||
+    norm.includes("sauvignon") ||
+    norm.includes("casillero") ||
+    norm.includes("gato negro") ||
+    norm.includes("gatonegro") ||
+    norm.includes("santa rita") ||
+    norm.includes("concha y toro") ||
+    norm.includes("san pedro") ||
+    norm.includes("tarapaca") ||
+    norm.includes("undurraga") ||
+    norm.includes("valdivieso") ||
+    norm.includes("riccadonna") ||
+    norm.includes("chandon")
+  ) {
+    return { category: "Vinos & Espumantes" };
+  }
+
+  // Destilados & Licores
+  if (
+    norm.includes("whisky") ||
+    norm.includes("whiskey") ||
+    norm.includes("ron") ||
+    norm.includes("vodka") ||
+    norm.includes("gin") ||
+    norm.includes("tequila") ||
+    norm.includes("licor") ||
+    norm.includes("fernet") ||
+    norm.includes("jagermeister") ||
+    norm.includes("jager") ||
+    norm.includes("baileys") ||
+    norm.includes("aperol") ||
+    norm.includes("campari") ||
+    norm.includes("ramazzotti") ||
+    norm.includes("absolut") ||
+    norm.includes("smirnoff") ||
+    norm.includes("grey goose") ||
+    norm.includes("havana") ||
+    norm.includes("bacardi") ||
+    norm.includes("barcelo") ||
+    norm.includes("jack daniel") ||
+    norm.includes("johnnie") ||
+    norm.includes("chivas") ||
+    norm.includes("ballantine") ||
+    norm.includes("red label") ||
+    norm.includes("black label") ||
+    norm.includes("tanqueray") ||
+    norm.includes("beefeater") ||
+    norm.includes("bombay") ||
+    norm.includes("jose cuervo")
+  ) {
+    return { category: "Destilados & Licores" };
+  }
+
+  // Bebidas & Energéticas
+  if (
+    norm.includes("bebida") ||
+    norm.includes("gaseosa") ||
+    norm.includes("soda") ||
+    norm.includes("coca") ||
+    norm.includes("sprite") ||
+    norm.includes("fanta") ||
+    norm.includes("pepsi") ||
+    norm.includes("7up") ||
+    norm.includes("kem") ||
+    norm.includes("pap") ||
+    norm.includes("nordic") ||
+    norm.includes("ginger") ||
+    norm.includes("tonica") ||
+    norm.includes("red bull") ||
+    norm.includes("redbull") ||
+    norm.includes("monster") ||
+    norm.includes("score") ||
+    norm.includes("mr big") ||
+    norm.includes("jugo") ||
+    norm.includes("nectar") ||
+    norm.includes("agua") ||
+    norm.includes("cachantun") ||
+    norm.includes("benedicto") ||
+    norm.includes("vital")
+  ) {
+    return { category: "Bebidas & Energéticas" };
+  }
+
+  // Cigarros & Vapes
+  if (
+    norm.includes("cigarro") ||
+    norm.includes("cigarros") ||
+    norm.includes("cigarrette") ||
+    norm.includes("tabaco") ||
+    norm.includes("vape") ||
+    norm.includes("pod") ||
+    norm.includes("pall mall") ||
+    norm.includes("pallmall") ||
+    norm.includes("lucky") ||
+    norm.includes("luckies") ||
+    norm.includes("kent") ||
+    norm.includes("marlboro") ||
+    norm.includes("dunhill") ||
+    norm.includes("belmont") ||
+    norm.includes("rothmans") ||
+    norm.includes("sedas") ||
+    norm.includes("ocb") ||
+    norm.includes("papelillo") ||
+    norm.includes("encendedor") ||
+    norm.includes("clipper")
+  ) {
+    return { category: "Cigarros & Vapes" };
+  }
+
+  // Snacks & Piqueos
+  if (
+    norm.includes("papa") ||
+    norm.includes("papas") ||
+    norm.includes("lays") ||
+    norm.includes("ramitas") ||
+    norm.includes("doritos") ||
+    norm.includes("cheetos") ||
+    norm.includes("chizito") ||
+    norm.includes("mani") ||
+    norm.includes("frutos secos") ||
+    norm.includes("pistacho") ||
+    norm.includes("almendra") ||
+    norm.includes("aceituna") ||
+    norm.includes("nacho") ||
+    norm.includes("tika") ||
+    norm.includes("kryzpo") ||
+    norm.includes("snack")
+  ) {
+    return { category: "Snacks & Piqueos" };
+  }
+
+  // Dulces & Chocolates
+  if (
+    norm.includes("chocolate") ||
+    norm.includes("dulce") ||
+    norm.includes("galleta") ||
+    norm.includes("gomita") ||
+    norm.includes("caramelo") ||
+    norm.includes("sahne nuss") ||
+    norm.includes("sahnenuss") ||
+    norm.includes("vizzio") ||
+    norm.includes("trencito") ||
+    norm.includes("costa rama") ||
+    norm.includes("super 8") ||
+    norm.includes("super8") ||
+    norm.includes("chocman") ||
+    norm.includes("m&m") ||
+    norm.includes("snickers") ||
+    norm.includes("kit kat") ||
+    norm.includes("mentita") ||
+    norm.includes("halls") ||
+    norm.includes("chicle") ||
+    norm.includes("alfajor")
+  ) {
+    return { category: "Dulces & Chocolates" };
+  }
+
+  // Hielo & Abarrotes
+  if (
+    norm.includes("hielo") ||
+    norm.includes("ice") ||
+    norm.includes("carbon") ||
+    norm.includes("vaso") ||
+    norm.includes("servilleta") ||
+    norm.includes("abarrote")
+  ) {
+    return { category: "Hielo & Abarrotes" };
+  }
+
+  return { category: "Otros / General" };
+}
+
+export async function classifyImageWithAI(
+  buffer: Buffer,
+  filename: string,
+  mimeType = "image/jpeg"
+): Promise<{ category: ProductImageSection; title?: string }> {
+  const heuristic = classifyImageHeuristic(filename);
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || buffer.length === 0) {
+    return heuristic;
+  }
+
+  try {
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+    const base64Data = buffer.toString("base64");
+
+    const prompt = `Analiza detalladamente esta foto de producto de botillería/minimarket/supermercado y clasifícala estrictamente en UNA sola de estas categorías exactas:
+- "Promociones & Packs" (combos de pisco+bebida+hielo, whisky+bebida+hielo, packs promocionales, ofertas combinadas, promociones armadas, promos de fiesta)
+- "Piscos" (botellas o latas de pisco: Mistral, Alto del Carmen, Campanario, Capel, Horcón Quemado, Bauzá, Control C, etc.)
+- "Cervezas" (latas, botellas, six-packs, Coronitas, Cristal, Escudo, Heineken, Stella Artois, Royal Guard, Becker, Kunstmann, Austral, etc.)
+- "Vinos & Espumantes" (vino tinto, blanco, rosé, espumante, champagne, Casillero del Diablo, Gato Negro, Concha y Toro, Santa Helena, etc.)
+- "Destilados & Licores" (Whisky, Ron, Vodka, Gin, Tequila, Fernet, Jagermeister, Baileys, Aperol, etc.)
+- "Bebidas & Energéticas" (Coca Cola, Sprite, Fanta, aguas, jugos, Monster, Red Bull, Score, Gatorade, etc.)
+- "Cigarros & Vapes" (cajetillas de cigarros, tabaco, vapes, pods, encendedores, sedas, filtros)
+- "Snacks & Piqueos" (papas fritas Lay's, Ramitas, Doritos, Cheetos, maní, frutos secos, aceitunas, papas en tarro)
+- "Dulces & Chocolates" (chocolates Sahne Nuss, Vizzio, galletas, gomitas, caramelos, alfajores, bombones)
+- "Hielo & Abarrotes" (bolsas de hielo, vasos plásticos, carbón, servilletas, abarrotes generales)
+- "Otros / General" (si no calza en ninguna de las anteriores)
+
+Nombre del archivo sugerido: "${filename}"
+
+Responde ÚNICAMENTE en formato JSON:
+{
+  "category": "Nombre exacto de la categoría seleccionada de la lista anterior",
+  "title": "Nombre descriptivo breve del producto identificado (ej: Pisco Mistral 35° 750cc o Pack Pisco + Bebida + Hielo)"
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                data: base64Data,
+                mimeType: mimeType.includes("png") ? "image/png" : mimeType.includes("webp") ? "image/webp" : "image/jpeg",
+              },
+            },
+            { text: prompt },
+          ],
+        },
+      ],
+      config: { responseMimeType: "application/json" },
+    });
+
+    const parsed = JSON.parse(response.text || "{}");
+    if (parsed.category && (PRODUCT_IMAGE_SECTIONS as readonly string[]).includes(parsed.category)) {
+      return {
+        category: parsed.category as ProductImageSection,
+        title: parsed.title || heuristic.title,
+      };
+    }
+  } catch (err) {
+    console.warn("Gemini AI image classification fallback:", err);
+  }
+
+  return heuristic;
 }
 
 export function getMediaLibraryMeta(): MediaMetaItem[] {
@@ -68,7 +413,7 @@ export function saveExtractedImage(
   imgBuffer: Buffer,
   originalName: string,
   fallbackExt = "jpg"
-): { fileId: string; url: string } {
+): { fileId: string; url: string; category: string } {
   let ext = fallbackExt;
   const extMatch = originalName.match(/\.(png|jpe?g|webp|gif|bmp)$/i);
   if (extMatch) {
@@ -94,6 +439,8 @@ export function saveExtractedImage(
     fs.writeFileSync(seedPath, imgBuffer);
   } catch {}
 
+  const detected = classifyImageHeuristic(originalName);
+
   try {
     const metaList = getMediaLibraryMeta();
     metaList.unshift({
@@ -102,6 +449,8 @@ export function saveExtractedImage(
       url: `/api/storage/objects/${fileId}`,
       createdAt: new Date().toISOString(),
       size: imgBuffer.length,
+      category: detected.category,
+      aiDetectedTitle: detected.title,
     });
     saveMediaLibraryMeta(metaList);
   } catch (err) {
@@ -111,6 +460,7 @@ export function saveExtractedImage(
   return {
     fileId,
     url: `/api/storage/objects/${fileId}`,
+    category: detected.category,
   };
 }
 
@@ -1421,17 +1771,30 @@ apiRouter.get("/media-library", (_req, res) => {
           try {
             const stats = fs.statSync(path.join(UPLOADS_DIR, file));
             if (stats.isFile()) {
+              const detected = classifyImageHeuristic(file);
               const newItem: MediaMetaItem = {
                 id: file,
                 name: `Imagen_${file.slice(0, 8)}.jpg`,
                 url: `/api/storage/objects/${file}`,
                 createdAt: stats.mtime.toISOString(),
                 size: stats.size,
+                category: detected.category,
+                aiDetectedTitle: detected.title,
               };
               metaMap.set(file, newItem);
               changed = true;
             }
           } catch {}
+        }
+      }
+
+      // Fill in category for any existing items that don't have one
+      for (const item of metaMap.values()) {
+        if (!item.category) {
+          const detected = classifyImageHeuristic(item.name || item.id);
+          item.category = detected.category;
+          if (detected.title && !item.aiDetectedTitle) item.aiDetectedTitle = detected.title;
+          changed = true;
         }
       }
 
@@ -1444,7 +1807,7 @@ apiRouter.get("/media-library", (_req, res) => {
     const validItems: MediaMetaItem[] = Array.from(metaMap.values());
     validItems.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    res.json({ images: validItems });
+    res.json({ images: validItems, categories: PRODUCT_IMAGE_SECTIONS });
   } catch (err) {
     console.error("Error reading media library:", err);
     res.status(500).json({ error: "Failed to load media library" });
@@ -1452,7 +1815,7 @@ apiRouter.get("/media-library", (_req, res) => {
 });
 
 // Batch upload endpoint: accepts multiple images at once
-apiRouter.post("/media-library/upload-batch", (req, res) => {
+apiRouter.post("/media-library/upload-batch", async (req, res) => {
   try {
     const { files } = req.body as { files: Array<{ name: string; data: string }> };
     if (!Array.isArray(files) || files.length === 0) {
@@ -1463,6 +1826,9 @@ apiRouter.post("/media-library/upload-batch", (req, res) => {
     const currentMeta = getMediaLibraryMeta();
     const newItems: MediaMetaItem[] = [];
 
+    // First write files and set heuristic default
+    const savedFiles: Array<{ fileId: string; buffer: Buffer; name: string; mimeType: string }> = [];
+
     for (const item of files) {
       if (!item.data) continue;
       const fileId = randomUUID();
@@ -1470,8 +1836,12 @@ apiRouter.post("/media-library/upload-batch", (req, res) => {
 
       // Extract base64
       let base64Data = item.data;
+      let mimeType = "image/jpeg";
       if (base64Data.includes(";base64,")) {
-        base64Data = base64Data.split(";base64,")[1];
+        const parts = base64Data.split(";base64,");
+        const mimeMatch = parts[0].match(/data:(.*?)$/);
+        if (mimeMatch) mimeType = mimeMatch[1];
+        base64Data = parts[1];
       }
 
       const buffer = Buffer.from(base64Data, "base64");
@@ -1480,12 +1850,33 @@ apiRouter.post("/media-library/upload-batch", (req, res) => {
         fs.writeFileSync(path.join(SEED_UPLOADS_DIR, fileId), buffer);
       } catch {}
 
+      savedFiles.push({ fileId, buffer, name: item.name || `Imagen_${fileId.slice(0, 8)}.jpg`, mimeType });
+    }
+
+    // Now classify using AI in parallel if GEMINI_API_KEY is present
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    for (const saved of savedFiles) {
+      let detected: { category: ProductImageSection; title?: string };
+
+      if (apiKey && saved.buffer.length > 0) {
+        try {
+          detected = await classifyImageWithAI(saved.buffer, saved.name, saved.mimeType);
+        } catch {
+          detected = classifyImageHeuristic(saved.name || saved.fileId);
+        }
+      } else {
+        detected = classifyImageHeuristic(saved.name || saved.fileId);
+      }
+
       const metaItem: MediaMetaItem = {
-        id: fileId,
-        name: item.name || `Imagen_${fileId.slice(0, 8)}.jpg`,
-        url: `/api/storage/objects/${fileId}`,
+        id: saved.fileId,
+        name: saved.name,
+        url: `/api/storage/objects/${saved.fileId}`,
         createdAt: new Date().toISOString(),
-        size: buffer.length,
+        size: saved.buffer.length,
+        category: detected.category,
+        aiDetectedTitle: detected.title,
       };
 
       newItems.push(metaItem);
@@ -1497,6 +1888,71 @@ apiRouter.post("/media-library/upload-batch", (req, res) => {
   } catch (err) {
     console.error("Batch upload error:", err);
     res.status(500).json({ error: "Failed to upload batch images" });
+  }
+});
+
+// Clasificación / Organización masiva con Inteligencia Artificial
+apiRouter.post("/media-library/classify-ai", async (req, res) => {
+  try {
+    const { forceAll = false } = req.body || {};
+    const currentMeta = getMediaLibraryMeta();
+    let updatedCount = 0;
+
+    for (const item of currentMeta) {
+      if (forceAll || !item.category || item.category === "Otros / General") {
+        let buffer: Buffer | null = null;
+        const filePath = path.join(UPLOADS_DIR, item.id);
+        const seedPath = path.join(SEED_UPLOADS_DIR, item.id);
+        if (fs.existsSync(filePath)) {
+          buffer = fs.readFileSync(filePath);
+        } else if (fs.existsSync(seedPath)) {
+          buffer = fs.readFileSync(seedPath);
+        }
+
+        if (buffer && buffer.length > 0) {
+          const classified = await classifyImageWithAI(buffer, item.name || item.id);
+          item.category = classified.category;
+          if (classified.title) {
+            item.aiDetectedTitle = classified.title;
+          }
+          updatedCount++;
+        } else {
+          const heuristic = classifyImageHeuristic(item.name || item.id);
+          item.category = heuristic.category;
+          if (heuristic.title) item.aiDetectedTitle = heuristic.title;
+          updatedCount++;
+        }
+      }
+    }
+
+    saveMediaLibraryMeta(currentMeta);
+    res.json({ ok: true, updatedCount, images: currentMeta, categories: PRODUCT_IMAGE_SECTIONS });
+  } catch (err: any) {
+    console.error("Error in AI classification of media library:", err);
+    res.status(500).json({ error: "Error classifying media: " + err.message });
+  }
+});
+
+// Actualizar categoría o nombre de una imagen
+apiRouter.patch("/media-library/:id", (req, res) => {
+  try {
+    const fileId = req.params.id;
+    const { category, name, aiDetectedTitle } = req.body;
+    const currentMeta = getMediaLibraryMeta();
+    const item = currentMeta.find((m) => m.id === fileId);
+    if (!item) {
+      res.status(404).json({ error: "Image not found" });
+      return;
+    }
+
+    if (category !== undefined) item.category = category;
+    if (name !== undefined) item.name = name;
+    if (aiDetectedTitle !== undefined) item.aiDetectedTitle = aiDetectedTitle;
+
+    saveMediaLibraryMeta(currentMeta);
+    res.json({ ok: true, image: item });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to update image" });
   }
 });
 
