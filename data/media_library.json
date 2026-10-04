@@ -1,5 +1,124 @@
 [
   {
+    "id": "d9994cdc-2346-4bf5-ae58-9d8d155a6561.jpg",
+    "name": "Bolsa de Hielo Purificado en Cubos 2kg_image16.jpeg",
+    "url": "/api/storage/objects/d9994cdc-2346-4bf5-ae58-9d8d155a6561.jpg",
+    "createdAt": "2026-10-04T21:27:30.801Z",
+    "size": 21745
+  },
+  {
+    "id": "4e8c0b5d-5cef-4a8d-8647-21bc62937a87.jpg",
+    "name": "Doritos Mega Queso 200g_image15.jpeg",
+    "url": "/api/storage/objects/4e8c0b5d-5cef-4a8d-8647-21bc62937a87.jpg",
+    "createdAt": "2026-10-04T21:27:30.799Z",
+    "size": 37745
+  },
+  {
+    "id": "f7a22f57-0a7e-4a3a-8369-e869b763bd64.jpg",
+    "name": "Papas Fritas Lays Clásicas 250g_image14.jpeg",
+    "url": "/api/storage/objects/f7a22f57-0a7e-4a3a-8369-e869b763bd64.jpg",
+    "createdAt": "2026-10-04T21:27:30.798Z",
+    "size": 37745
+  },
+  {
+    "id": "f7fb6fbf-2f18-4b79-8e1e-346f9f292160.jpg",
+    "name": "Espumante Valdivieso Brut 750ml_image13.jpeg",
+    "url": "/api/storage/objects/f7fb6fbf-2f18-4b79-8e1e-346f9f292160.jpg",
+    "createdAt": "2026-10-04T21:27:30.796Z",
+    "size": 89415
+  },
+  {
+    "id": "71447e75-e027-4552-9cd6-2267cc53f050.jpg",
+    "name": "Vino Casillero del Diablo Cabernet Sauvignon 750ml_image12.jpeg",
+    "url": "/api/storage/objects/71447e75-e027-4552-9cd6-2267cc53f050.jpg",
+    "createdAt": "2026-10-04T21:27:30.795Z",
+    "size": 54739
+  },
+  {
+    "id": "b9919481-b25f-4538-a061-a3066d502bfe.jpg",
+    "name": "Bebida Energética Monster Energy 473ml_image11.jpeg",
+    "url": "/api/storage/objects/b9919481-b25f-4538-a061-a3066d502bfe.jpg",
+    "createdAt": "2026-10-04T21:27:30.793Z",
+    "size": 40456
+  },
+  {
+    "id": "697f1b19-299a-43f4-9de2-800f18063379.jpg",
+    "name": "Coca-Cola Original 1.5L Desechable_image10.jpeg",
+    "url": "/api/storage/objects/697f1b19-299a-43f4-9de2-800f18063379.jpg",
+    "createdAt": "2026-10-04T21:27:30.791Z",
+    "size": 48822
+  },
+  {
+    "id": "661a8b6c-90c5-40e3-a508-a7af7b4c4737.jpg",
+    "name": "Gin Beefeater London Dry 750ml_image9.jpeg",
+    "url": "/api/storage/objects/661a8b6c-90c5-40e3-a508-a7af7b4c4737.jpg",
+    "createdAt": "2026-10-04T21:27:30.789Z",
+    "size": 70047
+  },
+  {
+    "id": "f4867d2c-cce2-413b-863c-14866b33e3a0.jpg",
+    "name": "Whisky Johnnie Walker Red Label 750ml_image8.jpeg",
+    "url": "/api/storage/objects/f4867d2c-cce2-413b-863c-14866b33e3a0.jpg",
+    "createdAt": "2026-10-04T21:27:30.787Z",
+    "size": 26962
+  },
+  {
+    "id": "19fe7d1f-9e6c-4389-8000-2f2128185cb0.jpg",
+    "name": "Cerveza Austral Calafate 330ml_image7.jpeg",
+    "url": "/api/storage/objects/19fe7d1f-9e6c-4389-8000-2f2128185cb0.jpg",
+    "createdAt": "2026-10-04T21:27:30.784Z",
+    "size": 99978
+  },
+  {
+    "id": "b8caee46-07e3-441b-9939-3651cdc68537.jpg",
+    "name": "Cerveza Kunstmann Torobayo 330ml_image6.jpeg",
+    "url": "/api/storage/objects/b8caee46-07e3-441b-9939-3651cdc68537.jpg",
+    "createdAt": "2026-10-04T21:27:30.782Z",
+    "size": 30469
+  },
+  {
+    "id": "b96138b3-1de0-4900-8e47-a5070c12641a.jpg",
+    "name": "Pack 6 Cervezas Heineken 330ml Botella_image5.jpeg",
+    "url": "/api/storage/objects/b96138b3-1de0-4900-8e47-a5070c12641a.jpg",
+    "createdAt": "2026-10-04T21:27:30.780Z",
+    "size": 62715
+  },
+  {
+    "id": "975d4a83-14de-4a5b-8adb-a921b00de80c.jpg",
+    "name": "Pack 6 Cervezas Corona Extra 330ml_image4.jpeg",
+    "url": "/api/storage/objects/975d4a83-14de-4a5b-8adb-a921b00de80c.jpg",
+    "createdAt": "2026-10-04T21:27:30.778Z",
+    "size": 97484
+  },
+  {
+    "id": "6d0d922c-ae10-448f-b3c0-7cd1bbe8becc.jpg",
+    "name": "Pisco Alto del Carmen 35° Especial 1 Litro_image3.jpeg",
+    "url": "/api/storage/objects/6d0d922c-ae10-448f-b3c0-7cd1bbe8becc.jpg",
+    "createdAt": "2026-10-04T21:27:30.776Z",
+    "size": 87317
+  },
+  {
+    "id": "a7fd4ea0-03b3-463e-b71d-fc3a6223cbcc.jpg",
+    "name": "Pisco Mistral 35° 750ml_image2.jpeg",
+    "url": "/api/storage/objects/a7fd4ea0-03b3-463e-b71d-fc3a6223cbcc.jpg",
+    "createdAt": "2026-10-04T21:27:30.774Z",
+    "size": 64114
+  },
+  {
+    "id": "a36bef51-213e-4eec-9231-8e600846436d.jpg",
+    "name": "Pack Promo Piscola: Mistral 35° + Coca-Cola 1.5L + Hielo 2kg_image1.jpeg",
+    "url": "/api/storage/objects/a36bef51-213e-4eec-9231-8e600846436d.jpg",
+    "createdAt": "2026-10-04T21:27:30.772Z",
+    "size": 40824
+  },
+  {
+    "id": "1daa3d92-d037-4384-92dc-ce619b541d16",
+    "name": "2LT120TINTO.jpg",
+    "url": "/api/storage/objects/1daa3d92-d037-4384-92dc-ce619b541d16",
+    "createdAt": "2026-10-04T21:11:39.747Z",
+    "size": 97484
+  },
+  {
     "id": "4c5bd63c-8bf6-492f-9422-fd87f585412d.png",
     "name": "Test Producto Excel_image1.png",
     "url": "/api/storage/objects/4c5bd63c-8bf6-492f-9422-fd87f585412d.png",

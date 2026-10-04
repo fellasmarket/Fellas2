@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { GoogleGenAI } from "@google/genai";
 import { dbManager, type Product, type Order, type OrderItem } from "./db.ts";
@@ -511,6 +512,127 @@ apiRouter.get("/admin/download-template", (_req, res) => {
     res.send(buf);
   } catch (err: any) {
     res.status(500).json({ error: "Error generating template" });
+  }
+});
+
+// Exportar catálogo completo a Excel con imágenes incrustadas en máxima calidad
+apiRouter.get("/admin/export-excel-with-images", async (_req, res) => {
+  try {
+    const products = dbManager.getProducts();
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Fellas Market";
+    workbook.created = new Date();
+    
+    const worksheet = workbook.addWorksheet("Productos", {
+      views: [{ showGridLines: true }]
+    });
+
+    worksheet.columns = [
+      { header: "Nombre", key: "name", width: 38 },
+      { header: "Pasillo", key: "aisle", width: 25 },
+      { header: "Categoria", key: "category", width: 25 },
+      { header: "Subcategoria", key: "subcategory", width: 25 },
+      { header: "Precio", key: "price", width: 16 },
+      { header: "Oferta", key: "oferta", width: 12 },
+      { header: "Imagen", key: "image", width: 20 },
+    ];
+
+    // Formato de cabeceras
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF181828" },
+    };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+    headerRow.height = 30;
+
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i];
+      const excelRowIdx = i + 2; // 1-indexed
+
+      const row = worksheet.addRow({
+        name: p.name || "",
+        aisle: p.aisle || "General",
+        category: p.category || "General",
+        subcategory: p.subcategory || "General",
+        price: p.price || 0,
+        oferta: p.oferta ? "Si" : "No",
+        image: "",
+      });
+
+      row.height = 70;
+      row.alignment = { vertical: "middle", horizontal: "left" };
+
+      // Cargar e incrustar la imagen del producto en máxima calidad
+      if (p.image) {
+        try {
+          let imgBuffer: Buffer | null = null;
+          let ext: "png" | "jpeg" | "gif" = "jpeg";
+
+          const rawImg = String(p.image).trim();
+          if (rawImg.startsWith("/api/storage/objects/") || rawImg.startsWith("/storage/objects/")) {
+            const fileId = rawImg.split("/").pop() || "";
+            const filePath = path.join(UPLOADS_DIR, fileId);
+            const seedPath = path.join(SEED_UPLOADS_DIR, fileId);
+            if (fs.existsSync(filePath)) {
+              imgBuffer = fs.readFileSync(filePath);
+            } else if (fs.existsSync(seedPath)) {
+              imgBuffer = fs.readFileSync(seedPath);
+            }
+            if (fileId.toLowerCase().endsWith(".png")) ext = "png";
+            else if (fileId.toLowerCase().endsWith(".gif")) ext = "gif";
+            else ext = "jpeg";
+          } else if (rawImg.startsWith("data:image/")) {
+            const commaIdx = rawImg.indexOf(",");
+            if (commaIdx !== -1) {
+              const mimeMatch = rawImg.match(/^data:image\/([a-zA-Z0-9]+);base64,/);
+              if (mimeMatch && mimeMatch[1] === "png") ext = "png";
+              else if (mimeMatch && mimeMatch[1] === "gif") ext = "gif";
+              else ext = "jpeg";
+              imgBuffer = Buffer.from(rawImg.slice(commaIdx + 1), "base64");
+            }
+          } else if (rawImg.startsWith("http://") || rawImg.startsWith("https://")) {
+            try {
+              const fetchRes = await fetch(rawImg, { signal: AbortSignal.timeout(4000) });
+              if (fetchRes.ok) {
+                const arrayBuf = await fetchRes.arrayBuffer();
+                imgBuffer = Buffer.from(arrayBuf);
+                const ct = fetchRes.headers.get("content-type") || "";
+                if (ct.includes("png") || rawImg.toLowerCase().endsWith(".png")) ext = "png";
+                else if (ct.includes("gif") || rawImg.toLowerCase().endsWith(".gif")) ext = "gif";
+                else ext = "jpeg";
+              }
+            } catch {}
+          }
+
+          if (imgBuffer && imgBuffer.length > 0) {
+            const imageId = workbook.addImage({
+              buffer: imgBuffer as any,
+              extension: ext,
+            });
+
+            worksheet.addImage(imageId, {
+              tl: { col: 6, row: excelRowIdx - 1 }, // 0-indexed: col 6 es Columna G (Imagen), row excelRowIdx-1
+              ext: { width: 65, height: 65 },
+              editAs: "oneCell",
+            });
+          }
+        } catch (imgErr) {
+          console.error(`Error attaching image for product ${p.name}:`, imgErr);
+        }
+      }
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Disposition", `attachment; filename="productos_fellas_con_imagenes_${dateStr}.xlsx"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(Buffer.from(buffer as any));
+  } catch (err: any) {
+    console.error("Error exporting Excel with images:", err);
+    res.status(500).json({ error: "Error al generar archivo Excel con imágenes: " + err.message });
   }
 });
 

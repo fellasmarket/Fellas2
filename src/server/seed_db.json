@@ -183,6 +183,11 @@
       "id": 7,
       "name": "Hielo & Promos",
       "position": 6
+    },
+    {
+      "id": 8,
+      "name": "Cat Test",
+      "position": 7
     }
   ],
   "aisles": [
@@ -209,6 +214,14 @@
       "bannerTitle": "Combos & Ofertas",
       "bannerSubtitle": "Packs fiesta armados para disfrutar al máximo",
       "position": 2
+    },
+    {
+      "id": 4,
+      "name": "Pasillo Test",
+      "bannerImage": "",
+      "bannerTitle": "Pasillo Test",
+      "bannerSubtitle": "",
+      "position": 3
     }
   ],
   "subcategories": [
@@ -266,6 +279,46 @@
       "id": 11,
       "name": "Hielo & Congelados",
       "position": 10
+    },
+    {
+      "id": 12,
+      "name": "Cat Test",
+      "position": 11
+    },
+    {
+      "id": 13,
+      "name": "Hielo & Promos",
+      "position": 12
+    },
+    {
+      "id": 14,
+      "name": "Pisco & Destilados",
+      "position": 13
+    },
+    {
+      "id": 15,
+      "name": "Cervezas",
+      "position": 14
+    },
+    {
+      "id": 16,
+      "name": "Bebidas & Energéticas",
+      "position": 15
+    },
+    {
+      "id": 17,
+      "name": "Vinos & Espumantes",
+      "position": 16
+    },
+    {
+      "id": 18,
+      "name": "Snacks & Picoteo",
+      "position": 17
+    },
+    {
+      "id": 19,
+      "name": "Aguas & Jugos",
+      "position": 18
     }
   ],
   "products": [
@@ -333,7 +386,7 @@
       "id": 4,
       "name": "Pack 6 Cervezas Corona Extra 330ml",
       "price": 6990,
-      "image": "https://images.unsplash.com/photo-1608270191763-7182586df111?w=600&auto=format&fit=crop&q=80",
+      "image": "/api/storage/objects/1daa3d92-d037-4384-92dc-ce619b541d16",
       "category": "Cervezas",
       "aisle": "Botillería",
       "subcategory": "Cervezas Nacionales",
@@ -341,12 +394,13 @@
       "options": [],
       "oferta": true,
       "depositoEnabled": false,
-      "depositoAmount": 0,
+      "depositoAmount": 500,
       "position": 3,
       "publishedSocial": true,
       "hidden": false,
       "transferenciaEnabled": false,
-      "transferenciaAmount": 0
+      "transferenciaAmount": 0,
+      "contingencyEnabled": false
     },
     {
       "id": 5,

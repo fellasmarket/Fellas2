@@ -1842,6 +1842,16 @@ export default function Storefront() {
     window.open(`${import.meta.env.BASE_URL}api/admin/download-template`, "_blank");
   };
 
+  const handleDownloadProductsExcelWithImages = () => {
+    showToast("Generando y descargando Excel con imágenes en máxima calidad...");
+    const link = document.createElement("a");
+    link.href = `${import.meta.env.BASE_URL}api/admin/export-excel-with-images`;
+    link.download = `productos_fellas_con_imagenes_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -9068,11 +9078,12 @@ export default function Storefront() {
 
                         <button
                           type="button"
-                          onClick={() => downloadProductsExcel(products)}
-                          title="Exportar catálogo actual a Excel"
-                          className="flex items-center justify-center p-2.5 bg-green-700/20 border border-green-600/30 text-green-400 rounded-xl hover:bg-green-700/35 transition-colors shrink-0"
+                          onClick={handleDownloadProductsExcelWithImages}
+                          title="Descargar Excel completo con imágenes incrustadas en máxima calidad (nombre, pasillo, categoría, subcategoría, precio, imagen)"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-green-700/20 border border-green-600/40 text-green-400 rounded-xl hover:bg-green-700/35 transition-colors shrink-0 font-bold text-xs"
                         >
                           <Download size={15} />
+                          <span className="hidden sm:inline">Excel con Fotos</span>
                         </button>
                         <button
                           type="button"
