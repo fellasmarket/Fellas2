@@ -1169,12 +1169,7 @@ export default function Storefront() {
       const selected = customIds
         .map((id) => baseProducts.find((p) => p.id === id && !p.hidden))
         .filter((p): p is Product => Boolean(p));
-      if (selected.length >= 4) return selected.slice(0, 4);
-      const remainder = baseProducts.filter(
-        (p) => !p.hidden && !selected.some((s) => s.id === p.id)
-      );
-      const combined = [...selected, ...remainder];
-      if (combined.length > 0) return combined.slice(0, 4);
+      if (selected.length > 0) return selected.slice(0, 4);
     }
     const nonHidden = baseProducts.filter((p) => !p.hidden);
     return nonHidden.slice(0, 4);
@@ -1257,6 +1252,82 @@ export default function Storefront() {
     return sum + (item.price + fee) * item.quantity;
   }, 0), [cart]);
   const cartItemCount = useMemo(() => cart.reduce((count, item) => count + item.quantity, 0), [cart]);
+
+  // Descubrimiento aleatorio para el botón Ver más de Nuestras Colecciones
+  const handleDiscoverRandomSection = () => {
+    const availableAisles = aisles.filter((a) =>
+      baseProducts.some((p) => p.aisle === a && !p.hidden)
+    );
+    const availableCategories = categories.filter((c) =>
+      baseProducts.some((p) => p.category === c && !p.hidden)
+    );
+
+    type DiscoveryTarget =
+      | { type: "aisle"; name: string }
+      | { type: "category"; name: string }
+      | { type: "oportunidades"; name: string }
+      | { type: "packs"; name: string }
+      | { type: "recommended"; name: string };
+
+    const targets: DiscoveryTarget[] = [];
+
+    availableAisles.forEach((a) => targets.push({ type: "aisle", name: a }));
+    availableCategories.forEach((c) => targets.push({ type: "category", name: c }));
+    if (opportunitiesCustomProducts.length > 0) {
+      targets.push({ type: "oportunidades", name: "Oportunidades & Ofertas" });
+    }
+    if (packsCustomProducts.length > 0) {
+      targets.push({ type: "packs", name: "Packs Especiales" });
+    }
+    if (promoProducts.length > 0) {
+      targets.push({ type: "recommended", name: "#NUESTROSRECOMENDADOS" });
+    }
+
+    if (targets.length === 0) {
+      setShowDedicatedProductsPage(true);
+      setDedicatedViewMode("catalog");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const randomPick = targets[Math.floor(Math.random() * targets.length)];
+
+    if (randomPick.type === "aisle") {
+      setActiveCategory("");
+      setActiveAisle(randomPick.name);
+      setNavQuickFilter("");
+      setShowDedicatedProductsPage(true);
+      setDedicatedViewMode("pasillo");
+      showToast(`🎲 Descubriendo: Pasillo ${randomPick.name} ✨`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (randomPick.type === "category") {
+      setActiveAisle("");
+      setActiveCategory(randomPick.name);
+      setNavQuickFilter("");
+      setShowDedicatedProductsPage(true);
+      setDedicatedViewMode("catalog");
+      showToast(`🎲 Descubriendo: Categoría ${randomPick.name} ✨`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (randomPick.type === "oportunidades") {
+      setActiveAisle("");
+      setActiveCategory("");
+      setShowDedicatedProductsPage(true);
+      setDedicatedViewMode("oportunidades");
+      showToast(`🎲 Descubriendo: ${randomPick.name} 🔥`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (randomPick.type === "packs") {
+      setActiveAisle("");
+      setActiveCategory("");
+      setShowDedicatedProductsPage(true);
+      setDedicatedViewMode("packs");
+      showToast(`🎲 Descubriendo: ${randomPick.name} 🎁`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (randomPick.type === "recommended") {
+      setShowDedicatedProductsPage(false);
+      showToast(`🎲 Descubriendo: ${randomPick.name} ⭐`);
+      window.scrollTo({ top: 350, behavior: "smooth" });
+    }
+  };
 
   // Helper para parsear cualquier formato de hora (24h "11:00", 12h con AM/PM "11:00 AM", "23:45 PM", etc.) a minutos del día
   const parseTimeToMinutes = (rawStr?: string, defaultMinutes = 0): number => {
@@ -3792,15 +3863,13 @@ export default function Storefront() {
                   </section>
                 );
 
-                const showCollections = baseProducts.length > 0 || homeCollectionProducts.length > 0;
-
-                const selectedAisleObj = activeAisle ? aislesData.find((a) => a.name.toLowerCase() === activeAisle.toLowerCase()) : null;
-                const currentAisleBanner = activeAisle
-                  ? getAisleBannerImage(activeAisle, selectedAisleObj?.bannerImage)
-                  : (settings.aislesBannerImage || "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80");
+                const showCollections = homeCollectionProducts.length > 0;
+                const collectionsBanner =
+                  settings.aislesBannerImage ||
+                  "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80";
 
                 const collectionsSection = !showCollections ? null : (
-                  <section className="w-full mb-6 sm:mb-8">
+                  <section className="w-full mb-6 sm:mb-8" id="nuestras-colecciones-section">
                     <div className="w-full px-3 sm:px-6 md:px-8 mb-3 sm:mb-4 flex items-center gap-3 sm:gap-4">
                       <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/20" />
                       <span className="text-[10px] sm:text-xs md:text-sm font-black tracking-widest text-[#ffd025] uppercase shrink-0 px-1 select-none whitespace-nowrap drop-shadow">
@@ -3808,14 +3877,9 @@ export default function Storefront() {
                       </span>
                       <div className="flex-1 h-px bg-gradient-to-l from-transparent via-white/20 to-white/20" />
                       <button
-                        onClick={() => {
-                          setShowDedicatedProductsPage(true);
-                          setDedicatedViewMode("catalog");
-                          setActiveAisle("");
-                          setActiveCategory("");
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                        }}
-                        className="text-[10.5px] sm:text-xs font-semibold text-gray-400 hover:text-[#ffd025] uppercase tracking-wider transition-colors flex items-center gap-0.5 cursor-pointer shrink-0"
+                        onClick={handleDiscoverRandomSection}
+                        className="text-[10.5px] sm:text-xs font-semibold text-gray-400 hover:text-[#ffd025] uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                        title="Descubrir una sección o pasillo al azar"
                       >
                         <span>Ver más</span>
                         <ChevronRight size={13} />
@@ -3823,224 +3887,110 @@ export default function Storefront() {
                     </div>
 
                     <div className="w-full px-3 sm:px-6 md:px-8">
+                      {/* Banner Exclusivo de Nuestras Colecciones (fijo, independiente de pasillos) */}
                       <div className="w-full h-16 sm:h-28 md:h-48 lg:h-60 xl:h-72 overflow-hidden rounded-none border border-white/10 mb-3 sm:mb-4 bg-black select-none relative">
-                        <AnimatePresence mode="wait">
-                          <motion.img
-                            key={currentAisleBanner}
-                            src={currentAisleBanner}
-                            alt={activeAisle ? `Pasillo ${activeAisle}` : "Pasillos"}
-                            initial={{ opacity: 0.3 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0.3 }}
-                            transition={{ duration: 0.3 }}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-full h-full object-cover rounded-none"
-                          />
-                        </AnimatePresence>
-                        {activeAisle && (
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3 sm:p-4">
-                            <span className="text-[#ffd025] font-black text-xs sm:text-base uppercase tracking-wider drop-shadow">
-                              Pasillo: {activeAisle}
-                            </span>
-                          </div>
-                        )}
+                        <img
+                          src={collectionsBanner}
+                          alt="Nuestras Colecciones"
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover rounded-none"
+                        />
                       </div>
 
-                      {/* DESGLOSE DE COLECCIONES: EXACTAMENTE 4 PRODUCTOS A LA VISTA EN PORTADA */}
-                      {!isFiltered ? (
-                        <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 gap-x-2.5 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
-                          {homeCollectionProducts.slice(0, 4).map((product) => (
-                            <div
-                              key={product.id}
-                              className="group flex flex-col justify-between h-full w-full"
-                            >
-                              <div>
-                                <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
-                                  {product.image ? (
-                                    <img
-                                      src={product.image}
-                                      alt={product.name}
-                                      loading="lazy"
-                                      decoding="async"
-                                      className="w-full h-full object-cover rounded-none group-hover:scale-105 transition-transform duration-300"
-                                      onError={(e) => {
-                                        (e.currentTarget as HTMLImageElement).src =
-                                          "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
-                                      }}
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
-                                      <Package size={20} className="text-[#ffd025]/70" />
-                                      <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
-                                    </div>
-                                  )}
-
-                                  {product.oferta && (
-                                    <div className="absolute top-0 left-0 z-10">
-                                      <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-none shadow">
-                                        OFERTA
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
-                                  {(product.subcategory || product.category || product.aisle) ? (
-                                    <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
-                                      {product.subcategory || product.category || product.aisle}
-                                    </span>
-                                  ) : (
-                                    <span className="text-[7.5px] sm:text-[9px] font-medium uppercase tracking-wider text-transparent select-none">
-                                      -
-                                    </span>
-                                  )}
-                                </div>
-
-                                <h4
-                                  title={product.name}
-                                  className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
-                                >
-                                  {product.name}
-                                </h4>
-                              </div>
-
-                              <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
-                                <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
-                                  ${Number(product.price || 0).toLocaleString("es-CL")}
-                                </span>
-
-                                <button
-                                  onClick={() => handleAddToCartClick(product)}
-                                  disabled={!isStoreOpen}
-                                  className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                                  title="Añadir al carrito"
-                                  aria-label="Añadir al carrito"
-                                >
-                                  <Plus size={12} strokeWidth={2.5} />
-                                  <span className="hidden sm:inline text-[10px]">Añadir</span>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="space-y-6 sm:space-y-8">
-                          {activeAisles.map((aisleName) => {
-                            const rawAisleProducts = groupedByAisle[aisleName] || [];
-                            if (rawAisleProducts.length === 0) return null;
-                            const aisleProducts = isFiltered ? rawAisleProducts : rawAisleProducts.slice(0, 4);
-
-                            return (
-                              <div key={aisleName} id={`aisle-${normalize(aisleName)}`} className="scroll-mt-24">
-                                {/* GRILLA DE PRODUCTOS DEL PASILLO */}
-                                <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 gap-x-2.5 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
-                                  {aisleProducts.map((product) => (
-                                    <div
-                                      key={product.id}
-                                      className="group flex flex-col justify-between h-full w-full"
-                                    >
-                                      <div>
-                                        <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
-                                          {product.image ? (
-                                            <img
-                                              src={product.image}
-                                              alt={product.name}
-                                              loading="lazy"
-                                              decoding="async"
-                                              className="w-full h-full object-cover rounded-none group-hover:scale-105 transition-transform duration-300"
-                                              onError={(e) => {
-                                                (e.currentTarget as HTMLImageElement).src =
-                                                  "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
-                                              }}
-                                            />
-                                          ) : (
-                                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
-                                              <Package size={20} className="text-[#ffd025]/70" />
-                                              <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
-                                            </div>
-                                          )}
-
-                                          {product.oferta && (
-                                            <div className="absolute top-0 left-0 z-10">
-                                              <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-none shadow">
-                                                OFERTA
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
-                                          {(product.subcategory || product.category || product.aisle) ? (
-                                            <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
-                                              {product.subcategory || product.category || product.aisle}
-                                            </span>
-                                          ) : (
-                                            <span className="text-[7.5px] sm:text-[9px] font-medium uppercase tracking-wider text-transparent select-none">
-                                              -
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        <h4
-                                          title={product.name}
-                                          className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
-                                        >
-                                          {product.name}
-                                        </h4>
-                                      </div>
-
-                                      <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
-                                        <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
-                                          ${Number(product.price || 0).toLocaleString("es-CL")}
-                                        </span>
-
-                                        <button
-                                          onClick={() => handleAddToCartClick(product)}
-                                          disabled={!isStoreOpen}
-                                          className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                                          title="Añadir al carrito"
-                                          aria-label="Añadir al carrito"
-                                        >
-                                          <Plus size={12} strokeWidth={2.5} />
-                                          <span className="hidden sm:inline text-[10px]">Añadir</span>
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {/* Botón Ver catálogo completo al final */}
-                      {!isFiltered && (
-                        <div className="w-full flex justify-center mt-8 sm:mt-10 pb-2">
-                          <button
-                            onClick={() => {
-                              setShowDedicatedProductsPage(true);
-                              setDedicatedViewMode("catalog");
-                              setActiveAisle("");
-                              setActiveCategory("");
-                              window.scrollTo({ top: 0, behavior: "smooth" });
-                            }}
-                            className="px-8 py-3 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-xs sm:text-sm uppercase tracking-widest transition-all rounded-none hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#ffd025]/10"
+                      {/* Cuadrícula Exclusiva de los 4 Productos Seleccionados */}
+                      <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 gap-x-2.5 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
+                        {homeCollectionProducts.slice(0, 4).map((product) => (
+                          <div
+                            key={product.id}
+                            className="group flex flex-col justify-between h-full w-full"
                           >
-                            <span>Ver catálogo completo</span>
-                          </button>
-                        </div>
-                      )}
+                            <div>
+                              <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                                {product.image ? (
+                                  <img
+                                    src={product.image}
+                                    alt={product.name}
+                                    loading="lazy"
+                                    decoding="async"
+                                    className="w-full h-full object-cover rounded-none group-hover:scale-105 transition-transform duration-300"
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLImageElement).src =
+                                        "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
+                                    <Package size={20} className="text-[#ffd025]/70" />
+                                    <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
+                                  </div>
+                                )}
+
+                                {product.oferta && (
+                                  <div className="absolute top-0 left-0 z-10">
+                                    <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-none shadow">
+                                      OFERTA
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
+                                {(product.subcategory || product.category || product.aisle) ? (
+                                  <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                                    {product.subcategory || product.category || product.aisle}
+                                  </span>
+                                ) : (
+                                  <span className="text-[7.5px] sm:text-[9px] font-medium uppercase tracking-wider text-transparent select-none">
+                                    -
+                                  </span>
+                                )}
+                              </div>
+
+                              <h4
+                                title={product.name}
+                                className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                              >
+                                {product.name}
+                              </h4>
+                            </div>
+
+                            <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
+                              <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                                ${Number(product.price || 0).toLocaleString("es-CL")}
+                              </span>
+
+                              <button
+                                onClick={() => handleAddToCartClick(product)}
+                                disabled={!isStoreOpen}
+                                className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                title="Añadir al carrito"
+                                aria-label="Añadir al carrito"
+                              >
+                                <Plus size={12} strokeWidth={2.5} />
+                                <span className="hidden sm:inline text-[10px]">Añadir</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Botón Ver más para descubrimiento al azar */}
+                      <div className="w-full flex justify-center mt-6 sm:mt-8 pb-2">
+                        <button
+                          onClick={handleDiscoverRandomSection}
+                          className="px-8 py-3 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-xs sm:text-sm uppercase tracking-widest transition-all rounded-none hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#ffd025]/10"
+                          title="Explorar secciones al azar de la tienda"
+                        >
+                          <Sparkles size={16} />
+                          <span>Ver más (Descubrir al azar)</span>
+                        </button>
+                      </div>
                     </div>
                   </section>
                 );
 
-                // En estado inicial (Home, sin filtro de pasillo): #NUESTROSRECOMENDADOS siempre va PRIMERO, #NUESTRASCOLECCIONES SEGUNDO.
-                // Al hacer clic en un pasillo específico: se intercambian de lugar animadamente de arriba a abajo.
-                const sectionsOrder = isFiltered
-                  ? ["collections", "recommended"]
-                  : ["recommended", "collections"];
+                const sectionsOrder = ["recommended", "collections"];
 
                 return (
                   <div className="w-full space-y-6 sm:space-y-8">
