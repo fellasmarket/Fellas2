@@ -26,9 +26,10 @@ import {
   Candy,
   Package,
   Tag,
+  Zap,
+  Droplets,
 } from "lucide-react";
 import { uploadImagesBatch } from "../lib/image-batch-uploader";
-import { CATEGORY_ICONS, ORDERED_SECTIONS } from "./media-admin-panel";
 
 export interface MediaItem {
   id: string;
@@ -49,6 +50,42 @@ interface MediaLibraryModalProps {
   currentImage?: string;
   title?: string;
 }
+
+export const MODAL_ORDERED_SECTIONS: string[] = [
+  "Bebidas Alcohólicas",
+  "Piscos",
+  "Cervezas",
+  "Vinos & Espumantes",
+  "Destilados & Licores",
+  "Energizantes",
+  "Bebidas & Gaseosas",
+  "Jugos",
+  "Aguas",
+  "Cigarros & Tabacos",
+  "Snacks & Salados",
+  "Dulces & Chocolates",
+  "Promociones & Packs",
+  "Hielo & Abarrotes",
+  "Otros / General",
+];
+
+export const MODAL_CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  "Bebidas Alcohólicas": <GlassWater size={16} className="text-purple-400" />,
+  "Piscos": <Wine size={16} className="text-[#ffd025]" />,
+  "Cervezas": <Beer size={16} className="text-yellow-400" />,
+  "Vinos & Espumantes": <Wine size={16} className="text-red-400" />,
+  "Destilados & Licores": <GlassWater size={16} className="text-cyan-400" />,
+  "Energizantes": <Zap size={16} className="text-lime-400" />,
+  "Bebidas & Gaseosas": <GlassWater size={16} className="text-emerald-400" />,
+  "Jugos": <Droplets size={16} className="text-amber-400" />,
+  "Aguas": <Droplets size={16} className="text-sky-400" />,
+  "Cigarros & Tabacos": <Cigarette size={16} className="text-orange-400" />,
+  "Snacks & Salados": <Cookie size={16} className="text-amber-500" />,
+  "Dulces & Chocolates": <Candy size={16} className="text-pink-400" />,
+  "Promociones & Packs": <Flame size={16} className="text-amber-400" />,
+  "Hielo & Abarrotes": <Package size={16} className="text-blue-300" />,
+  "Otros / General": <FolderOpen size={16} className="text-gray-400" />,
+};
 
 export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   isOpen,
@@ -91,9 +128,10 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchImages();
-      // Lock scroll on background body
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
+      const originalOverflow = document.body?.style?.overflow || "";
+      if (document.body) {
+        document.body.style.overflow = "hidden";
+      }
 
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === "Escape") {
@@ -103,13 +141,13 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
       window.addEventListener("keydown", handleKeyDown);
 
       return () => {
-        document.body.style.overflow = originalOverflow;
+        if (document.body) {
+          document.body.style.overflow = originalOverflow;
+        }
         window.removeEventListener("keydown", handleKeyDown);
       };
     }
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   // Process batch of files with concurrency, compression, and auto AI classification
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,13 +200,13 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         setImages(data.images || []);
-        alert(`¡Organización con IA completada! Se analizaron y organizaron ${data.updatedCount || images.length} imágenes en sus respectivas secciones.`);
+        alert(`¡Organización completada! Se analizaron y organizaron las imágenes por sus títulos y tipo.`);
       } else {
-        alert("Error al organizar con IA.");
+        alert("Error al organizar las imágenes.");
       }
     } catch (err) {
-      console.error("Error organizing with AI:", err);
-      alert("Error de conexión al ejecutar la organización por IA.");
+      console.error("Error organizing media:", err);
+      alert("Error de conexión al organizar imágenes.");
     } finally {
       setClassifyingAI(false);
     }
@@ -208,7 +246,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
       if (res.ok) {
         setImages([]);
         onMediaDeleted?.();
-        alert("Se han eliminado todas las imágenes del archivo de medios y de los productos con éxito.");
+        alert("Se han eliminado todas las imágenes del archivo de medios con éxito.");
       } else {
         alert("Error al eliminar las imágenes del archivo.");
       }
@@ -222,9 +260,11 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
 
   const handleCopyUrl = (url: string, id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(url);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    try {
+      navigator.clipboard.writeText(url);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {}
   };
 
   const handleUpdateCategory = async (id: string, newCategory: string, e?: React.ChangeEvent<HTMLSelectElement>) => {
@@ -251,9 +291,9 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
     return assignedImages.some((assigned) => {
       if (!assigned) return false;
       const cleanAssigned = String(assigned).trim().toLowerCase();
-      const cleanUrl = String(img.url).trim().toLowerCase();
-      const cleanId = String(img.id).trim().toLowerCase();
-      const cleanName = String(img.name).trim().toLowerCase();
+      const cleanUrl = String(img.url || "").trim().toLowerCase();
+      const cleanId = String(img.id || "").trim().toLowerCase();
+      const cleanName = String(img.name || "").trim().toLowerCase();
       return (
         cleanAssigned === cleanUrl ||
         cleanAssigned === cleanId ||
@@ -267,12 +307,12 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   const isCurrentProductImage = (img: MediaItem) => {
     if (!currentImage) return false;
     const cleanCurrent = String(currentImage).trim().toLowerCase();
-    const cleanUrl = String(img.url).trim().toLowerCase();
-    const cleanId = String(img.id).trim().toLowerCase();
+    const cleanUrl = String(img.url || "").trim().toLowerCase();
+    const cleanId = String(img.id || "").trim().toLowerCase();
     return cleanCurrent === cleanUrl || cleanCurrent === cleanId || cleanCurrent.includes(cleanId);
   };
 
-  const assignedCount = images.filter(isImageAssigned).length;
+  const assignedCount = (images || []).filter(isImageAssigned).length;
 
   const toggleSection = (secName: string) => {
     setCollapsedSections((prev) => ({
@@ -283,23 +323,25 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
 
   const toggleAllSections = (collapse: boolean) => {
     const newState: Record<string, boolean> = {};
-    ORDERED_SECTIONS.forEach((s) => {
+    MODAL_ORDERED_SECTIONS.forEach((s) => {
       newState[s] = collapse;
     });
     setCollapsedSections(newState);
   };
 
-  // Group images by section taking into account search query and assigned filter
+  // Group images by section safely
   const { groupedImages, sectionCounts, allFilteredCount } = useMemo(() => {
+    const safeSections = MODAL_ORDERED_SECTIONS;
     const counts: Record<string, number> = {};
-    ORDERED_SECTIONS.forEach((s) => (counts[s] = 0));
+    safeSections.forEach((s) => (counts[s] = 0));
 
-    const q = searchQuery.toLowerCase().trim();
+    const q = (searchQuery || "").toLowerCase().trim();
 
-    const filtered = images.filter((img) => {
+    const filtered = (images || []).filter((img) => {
+      if (!img) return false;
       // 1. Search match
       if (q) {
-        const matchName = img.name.toLowerCase().includes(q);
+        const matchName = (img.name || "").toLowerCase().includes(q);
         const matchCat = (img.category || "").toLowerCase().includes(q);
         const matchTitle = (img.aiDetectedTitle || "").toLowerCase().includes(q);
         if (!matchName && !matchCat && !matchTitle) return false;
@@ -307,7 +349,6 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
 
       // 2. Assigned filter
       if (hideAssigned && isImageAssigned(img)) {
-        // If this image is the one currently assigned to this product, keep it visible
         if (isCurrentProductImage(img)) return true;
         return false;
       }
@@ -316,12 +357,13 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
     });
 
     const grouped: Record<string, MediaItem[]> = {};
-    ORDERED_SECTIONS.forEach((s) => (grouped[s] = []));
+    safeSections.forEach((s) => (grouped[s] = []));
 
     filtered.forEach((img) => {
-      const cat = img.category && ORDERED_SECTIONS.includes(img.category) ? img.category : "Otros / General";
-      counts[cat] = (counts[cat] || 0) + 1;
+      const cat = img.category && safeSections.includes(img.category) ? img.category : "Otros / General";
+      if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push(img);
+      counts[cat] = (counts[cat] || 0) + 1;
     });
 
     return {
@@ -331,6 +373,9 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
     };
   }, [images, searchQuery, hideAssigned, assignedImages, currentImage]);
 
+  if (!isOpen) return null;
+  if (typeof document === "undefined" || !document.body) return null;
+
   const modalNode = (
     <div
       style={{
@@ -339,14 +384,14 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        zIndex: 999999,
+        zIndex: 9999999,
       }}
-      className="w-full h-full max-w-full max-h-full overflow-hidden flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md"
+      className="w-full h-full max-w-full max-h-full overflow-hidden flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-[98vw] md:max-w-5xl lg:max-w-6xl h-[92vh] max-h-[900px] bg-[#12121e] border-2 border-[#ffd025]/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-left ring-4 ring-black/70 animate-scale-in"
+        className="relative w-full max-w-[98vw] md:max-w-5xl lg:max-w-6xl h-[90vh] max-h-[880px] bg-[#12121e] border-2 border-[#ffd025]/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-left ring-4 ring-black/70 animate-scale-in text-white"
       >
         {/* Modal Header */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10 flex items-center justify-between bg-[#171726] shrink-0">
@@ -365,8 +410,8 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
               </div>
               <p className="text-[11px] sm:text-xs text-gray-400 truncate">
                 {onSelectImage
-                  ? "Organizadas por secciones con IA. Toca una foto para seleccionarla."
-                  : "Organizadas por secciones con IA para rápida búsqueda."}
+                  ? "Organizadas por secciones. Toca una foto para seleccionarla."
+                  : "Organizadas por secciones para rápida búsqueda."}
               </p>
             </div>
           </div>
@@ -377,11 +422,11 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                 type="button"
                 onClick={handleClassifyAI}
                 disabled={loading || classifyingAI || uploading}
-                title="Clasificar y organizar fotos con IA"
+                title="Clasificar fotos según título"
                 className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs font-bold transition cursor-pointer"
               >
                 <Bot size={14} className={classifyingAI ? "animate-bounce text-[#ffd025]" : ""} />
-                <span>{classifyingAI ? "Analizando..." : "Re-organizar con IA"}</span>
+                <span>{classifyingAI ? "Analizando..." : "Organizar por Títulos"}</span>
               </button>
             )}
 
@@ -527,7 +572,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
               <span>Todas ({allFilteredCount})</span>
             </button>
 
-            {ORDERED_SECTIONS.map((secName) => {
+            {MODAL_ORDERED_SECTIONS.map((secName) => {
               const count = sectionCounts[secName] || 0;
               if (count === 0 && selectedSectionFilter !== secName) return null;
               const isSelected = selectedSectionFilter === secName;
@@ -545,7 +590,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                       : "bg-white/5 text-gray-300 hover:text-white border-white/10 hover:border-white/20"
                   }`}
                 >
-                  {CATEGORY_ICONS[secName] || <Tag size={12} />}
+                  {MODAL_CATEGORY_ICONS[secName] || <Tag size={12} />}
                   <span>{secName}</span>
                   <span
                     className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
@@ -606,13 +651,12 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
             </div>
           ) : (
             <div className="space-y-4">
-              {ORDERED_SECTIONS.map((secName) => {
-                // If a specific section is filtered, only show that section
+              {MODAL_ORDERED_SECTIONS.map((secName) => {
                 if (selectedSectionFilter !== "all" && selectedSectionFilter !== secName) {
                   return null;
                 }
 
-                const sectionImages = groupedImages[secName] || [];
+                const sectionImages = (groupedImages && groupedImages[secName]) || [];
                 if (sectionImages.length === 0) return null;
 
                 const isCollapsed = collapsedSections[secName] || false;
@@ -629,7 +673,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                     >
                       <div className="flex items-center gap-2.5">
                         <div className="p-1.5 rounded-xl bg-white/5 border border-white/10 text-[#ffd025]">
-                          {CATEGORY_ICONS[secName] || <Tag size={16} />}
+                          {MODAL_CATEGORY_ICONS[secName] || <Tag size={16} />}
                         </div>
                         <span className="text-sm font-black text-white uppercase tracking-wider">
                           {secName}
@@ -745,7 +789,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                                   className="w-full bg-[#0c0c14] border border-white/10 rounded-lg px-1.5 py-0.5 text-[9px] font-semibold text-gray-300 focus:border-[#ffd025] focus:outline-none cursor-pointer"
                                   title="Mover foto a otra sección"
                                 >
-                                  {ORDERED_SECTIONS.map((s) => (
+                                  {MODAL_ORDERED_SECTIONS.map((s) => (
                                     <option key={s} value={s} className="bg-[#141422] text-white">
                                       {s}
                                     </option>
