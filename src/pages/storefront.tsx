@@ -677,7 +677,7 @@ export default function Storefront() {
     { product: Product; selectedOption: string } | null
   >(null);
   const [adminTab, setAdminTab] =
-    useState<"products" | "media" | "collections" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
+    useState<"products" | "recommended" | "collections" | "media" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [quickMediaImages, setQuickMediaImages] = useState<MediaItem[]>([]);
 
@@ -4668,6 +4668,7 @@ export default function Storefront() {
               </div>
               {[
                 { id: "products", label: "Productos", icon: Package, desc: "Catálogo, fotos y stock" },
+                { id: "recommended", label: "Nuestros Recomendados", icon: Sparkles, desc: "4 productos y banner promo" },
                 { id: "collections", label: "Nuestras Colecciones", icon: LayoutGrid, desc: "4 productos en portada" },
                 { id: "media", label: "Archivo de Imágenes", icon: FolderOpen, desc: "Subida en grupo y galería" },
                 { id: "classifications", label: "Clasificaciones", icon: Tag, desc: "Categorías y pasillos" },
@@ -4763,6 +4764,7 @@ export default function Storefront() {
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto custom-admin-scrollbar">
                   {[
                     { id: "products", label: "Productos", icon: Package },
+                    { id: "recommended", label: "Nuestros Recomendados", icon: Sparkles },
                     { id: "collections", label: "Nuestras Colecciones", icon: LayoutGrid },
                     { id: "media", label: "Archivo de Imágenes", icon: FolderOpen },
                     { id: "classifications", label: "Clasificaciones", icon: Tag },
@@ -4815,6 +4817,7 @@ export default function Storefront() {
               <div>
                 <h1 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
                   {adminTab === "products" && "📦 Gestión de Productos y Catálogo"}
+                  {adminTab === "recommended" && "⭐ Sección Nuestros Recomendados (#NUESTROSRECOMENDADOS)"}
                   {adminTab === "collections" && "✨ Sección Nuestras Colecciones (#NUESTRASCOLECCIONES)"}
                   {adminTab === "media" && "📁 Archivo de Imágenes y Galería de Medios"}
                   {adminTab === "classifications" && "🏷️ Clasificaciones, Categorías y Pasillos"}
@@ -4846,6 +4849,436 @@ export default function Storefront() {
 
             {/* Main Content Padding */}
             <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+              {adminTab === "recommended" && (
+                <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
+                  {/* Encabezado Principal */}
+                  <div className="bg-[#13131f]/90 backdrop-blur-2xl p-6 sm:p-7 rounded-3xl border border-[#ffd025]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl shadow-black/60">
+                    <div>
+                      <div className="flex items-center gap-2 text-xs font-bold text-[#ffd025] uppercase tracking-wider mb-1">
+                        <Sparkles size={15} /> Portada Pública & Móvil
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-black text-white uppercase flex items-center gap-2">
+                        Sección Nuestros Recomendados (#NUESTROSRECOMENDADOS)
+                      </h2>
+                      <p className="text-xs text-gray-400 mt-1 max-w-2xl">
+                        Configuración independiente: elige y ordena exactamente los <strong className="text-white">4 productos</strong> que estarán a la vista de los clientes bajo el banner de promociones y recomendados en la portada.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={saveSettings}
+                        className="px-5 py-2.5 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-xl font-black uppercase text-xs tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#ffd025]/20 flex items-center gap-2"
+                      >
+                        <CheckCircle size={15} /> Guardar a la Nube
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tarjeta de Banner Panorámico de la Sección */}
+                  <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                      <div>
+                        <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider block">
+                          Banner Panorámico de Promociones (#NUESTROSRECOMENDADOS)
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Imagen de cabecera que se visualiza arriba de la cuadrícula de los 4 productos recomendados.
+                        </p>
+                      </div>
+                      {settingsDraft.promoBannerImage && (
+                        <span className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-full font-bold">
+                          Banner Activo
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                      <div className="md:col-span-1">
+                        <div className="relative aspect-[16/7] w-full rounded-2xl overflow-hidden bg-black/60 border border-white/10 shadow">
+                          {settingsDraft.promoBannerImage ? (
+                            <img
+                              src={settingsDraft.promoBannerImage}
+                              alt="Banner Recomendados"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 p-4 text-center">
+                              <ImageIcon size={24} className="mb-1 text-gray-400" />
+                              <span className="text-[10px]">Sin imagen personalizada</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2 space-y-2.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={settingsDraft.promoBannerImage || ""}
+                            onChange={(e) =>
+                              setSettingsDraft((p) => ({ ...p, promoBannerImage: e.target.value }))
+                            }
+                            onBlur={(e) =>
+                              resolveImageUrl(e.target.value, (r) =>
+                                setSettingsDraft((p) => ({ ...p, promoBannerImage: r }))
+                              )
+                            }
+                            className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                            placeholder="URL de la imagen panorámica"
+                          />
+                          <label
+                            className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5"
+                            title="Subir archivo desde el dispositivo"
+                          >
+                            <Upload size={14} />
+                            <span className="hidden sm:inline">Subir</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                handleImageUpload(e, (url) =>
+                                  setSettingsDraft((p) => ({ ...p, promoBannerImage: url }))
+                                )
+                              }
+                            />
+                          </label>
+                          {settingsDraft.promoBannerImage && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSettingsDraft((p) => ({ ...p, promoBannerImage: "" }))
+                              }
+                              className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition-colors border border-red-500/20 text-xs shrink-0"
+                              title="Restaurar por defecto"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-400">
+                          Recomendado: Imagen horizontal panorámica (1200x500 px aprox).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* LOS 4 ESPACIOS / SLOTS FIJOS */}
+                  <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider block">
+                            Los 4 Productos Fijos en Nuestros Recomendados
+                          </span>
+                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#ffd025]/20 text-[#ffd025] font-bold border border-[#ffd025]/30">
+                            {(settingsDraft.recommendedProductIds ?? []).length} / 4 productos
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Organiza el orden de aparición arrastrando o usando las flechas. Máximo 4 productos a la vista.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const first4 = products.filter((p) => !p.hidden).slice(0, 4).map((p) => p.id);
+                            setSettingsDraft((p) => ({ ...p, recommendedProductIds: first4 }));
+                            showToast("Cargados los primeros 4 del catálogo");
+                          }}
+                          className="px-3 py-1.5 bg-[#ffd025]/10 hover:bg-[#ffd025]/20 text-[#ffd025] border border-[#ffd025]/30 rounded-xl text-[10px] font-bold uppercase transition-colors"
+                        >
+                          ⚡ Primeros 4
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const candidates = products.filter((p) => !p.hidden && (p.oferta || p.bestseller)).map((p) => p.id);
+                            const fallback = products.filter((p) => !p.hidden).map((p) => p.id);
+                            const picked = Array.from(new Set([...candidates, ...fallback])).slice(0, 4);
+                            if (picked.length === 0) {
+                              showToast("No hay productos disponibles");
+                              return;
+                            }
+                            setSettingsDraft((p) => ({ ...p, recommendedProductIds: picked }));
+                            showToast("Cargadas ofertas y destacados a recomendados");
+                          }}
+                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-[10px] font-bold uppercase transition-colors"
+                        >
+                          🔥 4 Ofertas
+                        </button>
+                        {(settingsDraft.recommendedProductIds ?? []).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSettingsDraft((p) => ({ ...p, recommendedProductIds: [] }));
+                              showToast("Selección de recomendados limpiada");
+                            }}
+                            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-xl text-[10px] font-bold uppercase transition-colors border border-white/10"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Grid de los 4 Slots */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      {Array.from({ length: 4 }).map((_, slotIdx) => {
+                        const prodId = (settingsDraft.recommendedProductIds ?? [])[slotIdx];
+                        const prod = prodId ? products.find((p) => p.id === prodId) : null;
+
+                        if (!prod) {
+                          return (
+                            <div
+                              key={slotIdx}
+                              className="h-56 rounded-2xl border-2 border-dashed border-white/15 bg-black/30 p-4 flex flex-col items-center justify-center text-center group hover:border-[#ffd025]/40 transition-colors"
+                            >
+                              <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 mb-2 font-black text-sm">
+                                #{slotIdx + 1}
+                              </div>
+                              <span className="text-xs font-bold text-gray-300 mb-1">Posición #{slotIdx + 1} Disponible</span>
+                              <span className="text-[11px] text-gray-500 leading-tight">
+                                Selecciona un producto del catálogo abajo para asignarlo aquí.
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={prod.id}
+                            className="rounded-2xl border border-white/15 bg-[#12121d] p-3 flex flex-col justify-between shadow-xl relative group"
+                          >
+                            <div>
+                              <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-black mb-2.5">
+                                {prod.image ? (
+                                  <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-white/5">
+                                    <Package size={24} className="text-gray-500" />
+                                  </div>
+                                )}
+                                <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#ffd025] text-black text-[10px] font-black rounded-md shadow">
+                                  Posición #{slotIdx + 1}
+                                </span>
+                                {prod.oferta && (
+                                  <span className="absolute top-2 right-2 px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-black rounded shadow">
+                                    OFERTA
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[9.5px] uppercase font-bold text-gray-400 truncate mb-0.5">
+                                {prod.category || prod.aisle || "Sin categoría"}
+                              </div>
+                              <p className="text-xs font-bold text-white line-clamp-2 leading-tight min-h-[28px]">{prod.name}</p>
+                              <p className="text-sm text-[#ffd025] font-black mt-1">
+                                ${Number(prod.price || 0).toLocaleString("es-CL")}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-white/10">
+                              <div className="flex items-center gap-1">
+                                {slotIdx > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const list = [...(settingsDraft.recommendedProductIds ?? [])];
+                                      const tmp = list[slotIdx];
+                                      list[slotIdx] = list[slotIdx - 1]!;
+                                      list[slotIdx - 1] = tmp!;
+                                      setSettingsDraft((p) => ({ ...p, recommendedProductIds: list }));
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                                    title="Mover a posición anterior"
+                                  >
+                                    <ArrowLeft size={13} />
+                                  </button>
+                                )}
+                                {slotIdx < (settingsDraft.recommendedProductIds ?? []).length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const list = [...(settingsDraft.recommendedProductIds ?? [])];
+                                      const tmp = list[slotIdx];
+                                      list[slotIdx] = list[slotIdx + 1]!;
+                                      list[slotIdx + 1] = tmp!;
+                                      setSettingsDraft((p) => ({ ...p, recommendedProductIds: list }));
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                                    title="Mover a posición siguiente"
+                                  >
+                                    <ChevronRight size={13} />
+                                  </button>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSettingsDraft((p) => ({
+                                    ...p,
+                                    recommendedProductIds: (p.recommendedProductIds ?? []).filter((x) => x !== prod.id),
+                                  }));
+                                }}
+                                className="px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                title="Quitar de Recomendados"
+                              >
+                                <X size={13} /> Quitar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Buscador y Selección de Productos desde el Catálogo */}
+                  <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider block">
+                          Catálogo de Productos Disponibles
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Haz clic en &quot;Asignar&quot; para agregar un producto a uno de los 4 espacios disponibles en Recomendados.
+                        </p>
+                      </div>
+                      <div className="relative w-full sm:w-72">
+                        <input
+                          type="text"
+                          value={featuredRecoSearch}
+                          onChange={(e) => setFeaturedRecoSearch(e.target.value)}
+                          placeholder="Buscar por nombre, categoría, pasillo..."
+                          className="w-full bg-[#12121d] border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-xs focus:border-[#ffd025] pl-8"
+                        />
+                        <Search size={14} className="absolute left-2.5 top-3 text-gray-400 pointer-events-none" />
+                        {featuredRecoSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setFeaturedRecoSearch("")}
+                            className="absolute right-2.5 top-3 text-gray-400 hover:text-white"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Grid del Catálogo */}
+                    <div className="max-h-96 overflow-y-auto pr-1 space-y-2 custom-admin-scrollbar">
+                      {products
+                        .filter((p) => !p.hidden)
+                        .filter((p) => {
+                          if (!featuredRecoSearch.trim()) return true;
+                          const q = featuredRecoSearch.toLowerCase();
+                          return (
+                            p.name.toLowerCase().includes(q) ||
+                            (p.category && p.category.toLowerCase().includes(q)) ||
+                            (p.aisle && p.aisle.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((product) => {
+                          const currentList = settingsDraft.recommendedProductIds ?? [];
+                          const isSelected = currentList.includes(product.id);
+                          const slotPos = isSelected ? currentList.indexOf(product.id) + 1 : -1;
+                          const isFull = currentList.length >= 4;
+
+                          return (
+                            <div
+                              key={product.id}
+                              className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                                isSelected
+                                  ? "bg-[#ffd025]/10 border-[#ffd025]/40 text-white"
+                                  : "bg-[#141420] border-white/5 text-gray-300 hover:border-white/15"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-12 h-12 rounded-xl bg-black overflow-hidden shrink-0 border border-white/10">
+                                  {product.image ? (
+                                    <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-500">
+                                      <Package size={16} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white truncate">{product.name}</p>
+                                  <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+                                    <span>{product.category || product.aisle || "General"}</span>
+                                    <span>•</span>
+                                    <span className="text-[#ffd025] font-black">${Number(product.price || 0).toLocaleString("es-CL")}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                {isSelected ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase text-[#ffd025] bg-[#ffd025]/20 border border-[#ffd025]/30 px-2.5 py-1 rounded-lg">
+                                      ✓ Posición #{slotPos}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSettingsDraft((p) => ({
+                                          ...p,
+                                          recommendedProductIds: (p.recommendedProductIds ?? []).filter((x) => x !== product.id),
+                                        }));
+                                      }}
+                                      className="px-2.5 py-1 bg-white/5 hover:bg-red-500/20 hover:text-red-300 text-gray-400 rounded-lg text-xs font-bold border border-white/10 transition-colors"
+                                    >
+                                      Quitar
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={isFull}
+                                    onClick={() => {
+                                      if (isFull) {
+                                        showToast("Solo se permiten 4 productos en Recomendados. Quita uno antes de añadir otro.");
+                                        return;
+                                      }
+                                      setSettingsDraft((p) => ({
+                                        ...p,
+                                        recommendedProductIds: [...(p.recommendedProductIds ?? []), product.id],
+                                      }));
+                                      showToast(`Producto agregado a Posición #${(settingsDraft.recommendedProductIds ?? []).length + 1}`);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                                      isFull
+                                        ? "bg-white/5 text-gray-600 cursor-not-allowed border border-white/5"
+                                        : "bg-[#ffd025] text-black hover:bg-[#e5b81a] shadow"
+                                    }`}
+                                  >
+                                    <Plus size={13} /> {isFull ? "Lleno (4/4)" : "Asignar"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Botón Guardar Flotante / Inferior */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={saveSettings}
+                      className="w-full py-4 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-2xl font-black uppercase text-sm tracking-wider hover:scale-[1.005] active:scale-[0.99] transition-all shadow-xl shadow-[#ffd025]/20 flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle size={18} /> Guardar Selección de Nuestros Recomendados a la Nube
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {adminTab === "collections" && (
                 <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
                   {/* Encabezado Principal */}
@@ -6033,6 +6466,13 @@ export default function Storefront() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setAdminTab("recommended")}
+                                  className="px-3 py-1.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black rounded-xl text-[10px] font-black uppercase transition-colors flex items-center gap-1 shadow"
+                                >
+                                  <Sparkles size={12} /> Ir al Área Dedicada
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -9614,6 +10054,16 @@ export default function Storefront() {
                               className="px-4 py-2 bg-gradient-to-r from-[#ffd025] to-[#e6b800] text-[#141414] rounded-xl font-black text-xs uppercase flex items-center gap-1.5 shadow-md shadow-[#ffd025]/20 hover:scale-[1.02] transition-all"
                             >
                               <Plus size={15} /> + Nuevo Producto
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminTab("recommended");
+                              }}
+                              className="px-3.5 py-2 bg-[#ffd025]/15 border border-[#ffd025]/30 text-[#ffd025] hover:bg-[#ffd025]/25 rounded-xl font-bold text-xs uppercase flex items-center gap-1.5 transition-all"
+                              title="Configurar los 4 productos de Nuestros Recomendados"
+                            >
+                              <Sparkles size={14} /> Recomendados (4)
                             </button>
                             <button
                               type="button"
