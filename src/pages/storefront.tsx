@@ -2423,50 +2423,6 @@ export default function Storefront() {
             <div className="flex-1 space-y-4">
               <p className="text-[11px] font-black uppercase text-[#ffd025] tracking-widest">Navegación de Pasillos</p>
               
-              {/* Pestañas Especiales Oportunidades & Packs en Móvil */}
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setActiveCategory("");
-                    setActiveAisle("");
-                    setNavQuickFilter("");
-                    setShowDedicatedProductsPage(true);
-                    setDedicatedViewMode("oportunidades");
-                    setMobileNavDrawerOpen(false);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border ${
-                    showDedicatedProductsPage && dedicatedViewMode === "oportunidades"
-                      ? "bg-amber-400 text-black border-amber-400 shadow"
-                      : "bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20"
-                  }`}
-                >
-                  <span>OPORTUNIDADES</span>
-                  <span>⏰</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setActiveCategory("");
-                    setActiveAisle("");
-                    setNavQuickFilter("");
-                    setShowDedicatedProductsPage(true);
-                    setDedicatedViewMode("packs");
-                    setMobileNavDrawerOpen(false);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`px-3 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border ${
-                    showDedicatedProductsPage && dedicatedViewMode === "packs"
-                      ? "bg-amber-400 text-black border-amber-400 shadow"
-                      : "bg-purple-500/10 text-purple-300 border-purple-500/30 hover:bg-purple-500/20"
-                  }`}
-                >
-                  <span>PACKS</span>
-                  <span>🎁</span>
-                </button>
-              </div>
-
               <div className="space-y-1">
                 <button
                   onClick={() => {
@@ -2617,49 +2573,6 @@ export default function Storefront() {
                     <LayoutGrid size={19} className="shrink-0" />
                   </button>
                 </div>
-
-                {/* OPORTUNIDADES ⏰ (Visible en pantallas grandes) */}
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setActiveCategory("");
-                    setActiveAisle("");
-                    setNavQuickFilter("");
-                    setShowDedicatedProductsPage(true);
-                    setDedicatedViewMode("oportunidades");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`hidden lg:flex items-center gap-1.5 text-xs sm:text-sm font-black tracking-wider uppercase transition-colors shrink-0 ${
-                    showDedicatedProductsPage && dedicatedViewMode === "oportunidades"
-                      ? "text-amber-400"
-                      : "text-white hover:text-gray-300"
-                  }`}
-                  title="Ver oportunidades y ofertas"
-                >
-                  <span>OPORTUNIDADES</span>
-                  <span className="text-sm">⏰</span>
-                </button>
-
-                {/* PACKS (Visible en pantallas grandes) */}
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setActiveCategory("");
-                    setActiveAisle("");
-                    setNavQuickFilter("");
-                    setShowDedicatedProductsPage(true);
-                    setDedicatedViewMode("packs");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`hidden lg:block text-xs sm:text-sm font-black tracking-wider uppercase transition-colors shrink-0 ${
-                    showDedicatedProductsPage && dedicatedViewMode === "packs"
-                      ? "text-amber-400"
-                      : "text-white hover:text-gray-300"
-                  }`}
-                  title="Ver packs y promociones"
-                >
-                  PACKS
-                </button>
               </div>
 
               {/* 2. SECCIÓN CENTRAL: DIVISIÓN DE BÚSQUEDA CON LÍNEAS SEPARADORAS A AMBOS LADOS */}
@@ -2776,44 +2689,6 @@ export default function Storefront() {
                   }`}
                 >
                   Todo el catálogo
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveCategory("");
-                    setActiveAisle("");
-                    setNavQuickFilter("");
-                    setShowDedicatedProductsPage(true);
-                    setDedicatedViewMode("oportunidades");
-                    setShowAisleMenu(false);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`text-[10.5px] sm:text-xs uppercase tracking-wider transition-colors whitespace-nowrap shrink-0 py-0.5 ${
-                    showDedicatedProductsPage && dedicatedViewMode === "oportunidades"
-                      ? "text-amber-400 font-black"
-                      : "text-amber-300/80 hover:text-amber-300 font-semibold"
-                  }`}
-                >
-                  ⏰ Oportunidades
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveCategory("");
-                    setActiveAisle("");
-                    setNavQuickFilter("");
-                    setShowDedicatedProductsPage(true);
-                    setDedicatedViewMode("packs");
-                    setShowAisleMenu(false);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`text-[10.5px] sm:text-xs uppercase tracking-wider transition-colors whitespace-nowrap shrink-0 py-0.5 ${
-                    showDedicatedProductsPage && dedicatedViewMode === "packs"
-                      ? "text-amber-400 font-black"
-                      : "text-amber-300/80 hover:text-amber-300 font-semibold"
-                  }`}
-                >
-                  🎁 Packs
                 </button>
 
                 {allMenuSections.map((item) => {
