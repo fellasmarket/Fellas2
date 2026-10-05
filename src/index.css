@@ -96,7 +96,6 @@
     @apply border-border;
   }
   html, body {
-    overflow-x: hidden;
     font-family: 'Poppins', system-ui, -apple-system, sans-serif;
   }
   body {

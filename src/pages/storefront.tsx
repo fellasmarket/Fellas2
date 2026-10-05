@@ -584,6 +584,26 @@ export default function Storefront() {
   };
 
   const [view, setView] = useState<"client" | "admin-login" | "admin">("client");
+  const headerRef = useRef<HTMLElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState<number>(0);
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const update = () => {
+      if (headerRef.current) {
+        setHeaderHeight(headerRef.current.offsetHeight);
+      }
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [view]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -2517,7 +2537,11 @@ export default function Storefront() {
       )}
 
       {view === "client" && (
-        <header className="sticky top-0 z-50 bg-black text-white shadow-2xl select-none">
+        <header
+          ref={headerRef}
+          className="fixed top-0 left-0 right-0 w-full z-50 bg-black text-white shadow-2xl select-none"
+          style={{ position: "fixed", top: 0, left: 0, right: 0, width: "100%", zIndex: 50 }}
+        >
           {/* BARRA SUPERIOR (1/6): Degradado naranja-coral ultra delgado con tipografía equilibrada */}
           <div
             onClick={() => setShowComunasModal(true)}
@@ -3107,6 +3131,15 @@ export default function Storefront() {
             </div>
           )}
         </header>
+      )}
+
+      {/* Espaciador dinámico que replica la altura exacta del encabezado anclado */}
+      {view === "client" && (
+        <div
+          style={{ height: headerHeight > 0 ? `${headerHeight}px` : "72px" }}
+          aria-hidden="true"
+          className="w-full shrink-0 select-none pointer-events-none"
+        />
       )}
 
       {view === "client" && (
@@ -3973,18 +4006,6 @@ export default function Storefront() {
                             </div>
                           </div>
                         ))}
-                      </div>
-
-                      {/* Botón Ver más para descubrimiento al azar */}
-                      <div className="w-full flex justify-center mt-6 sm:mt-8 pb-2">
-                        <button
-                          onClick={handleDiscoverRandomSection}
-                          className="px-8 py-3 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-xs sm:text-sm uppercase tracking-widest transition-all rounded-none hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#ffd025]/10"
-                          title="Explorar secciones al azar de la tienda"
-                        >
-                          <Sparkles size={16} />
-                          <span>Ver más (Descubrir al azar)</span>
-                        </button>
                       </div>
                     </div>
                   </section>
