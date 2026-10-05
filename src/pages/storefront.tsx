@@ -657,7 +657,7 @@ export default function Storefront() {
     { product: Product; selectedOption: string } | null
   >(null);
   const [adminTab, setAdminTab] =
-    useState<"products" | "media" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
+    useState<"products" | "media" | "collections" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [quickMediaImages, setQuickMediaImages] = useState<MediaItem[]>([]);
 
@@ -1169,15 +1169,15 @@ export default function Storefront() {
       const selected = customIds
         .map((id) => baseProducts.find((p) => p.id === id && !p.hidden))
         .filter((p): p is Product => Boolean(p));
-      if (selected.length >= 6) return selected.slice(0, 6);
+      if (selected.length >= 4) return selected.slice(0, 4);
       const remainder = baseProducts.filter(
         (p) => !p.hidden && !selected.some((s) => s.id === p.id)
       );
       const combined = [...selected, ...remainder];
-      if (combined.length > 0) return combined.slice(0, 6);
+      if (combined.length > 0) return combined.slice(0, 4);
     }
     const nonHidden = baseProducts.filter((p) => !p.hidden);
-    return nonHidden.slice(0, 6);
+    return nonHidden.slice(0, 4);
   }, [baseProducts, settings.homeCollectionProductIds]);
 
   const opportunitiesCustomProducts = useMemo(() => {
@@ -3847,95 +3847,173 @@ export default function Storefront() {
                         )}
                       </div>
 
-                      {/* DESGLOSE POR PASILLO */}
-                      <div className="space-y-6 sm:space-y-8">
-                        {activeAisles.map((aisleName) => {
-                          const rawAisleProducts = groupedByAisle[aisleName] || [];
-                          if (rawAisleProducts.length === 0) return null;
-                          const aisleProducts = isFiltered ? rawAisleProducts : rawAisleProducts.slice(0, 4);
-
-                          return (
-                            <div key={aisleName} id={`aisle-${normalize(aisleName)}`} className="scroll-mt-24">
-                              {/* GRILLA DE PRODUCTOS DEL PASILLO */}
-                              <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 gap-x-2.5 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
-                                {aisleProducts.map((product) => (
-                                  <div
-                                    key={product.id}
-                                    className="group flex flex-col justify-between h-full w-full"
-                                  >
-                                    <div>
-                                      <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
-                                        {product.image ? (
-                                          <img
-                                            src={product.image}
-                                            alt={product.name}
-                                            loading="lazy"
-                                            decoding="async"
-                                            className="w-full h-full object-cover rounded-none group-hover:scale-105 transition-transform duration-300"
-                                            onError={(e) => {
-                                              (e.currentTarget as HTMLImageElement).src =
-                                                "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
-                                            }}
-                                          />
-                                        ) : (
-                                          <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
-                                            <Package size={20} className="text-[#ffd025]/70" />
-                                            <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
-                                          </div>
-                                        )}
-
-                                        {product.oferta && (
-                                          <div className="absolute top-0 left-0 z-10">
-                                            <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-none shadow">
-                                              OFERTA
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
-                                        {(product.subcategory || product.category || product.aisle) ? (
-                                          <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
-                                            {product.subcategory || product.category || product.aisle}
-                                          </span>
-                                        ) : (
-                                          <span className="text-[7.5px] sm:text-[9px] font-medium uppercase tracking-wider text-transparent select-none">
-                                            -
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      <h4
-                                        title={product.name}
-                                        className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
-                                      >
-                                        {product.name}
-                                      </h4>
+                      {/* DESGLOSE DE COLECCIONES: EXACTAMENTE 4 PRODUCTOS A LA VISTA EN PORTADA */}
+                      {!isFiltered ? (
+                        <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 gap-x-2.5 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
+                          {homeCollectionProducts.slice(0, 4).map((product) => (
+                            <div
+                              key={product.id}
+                              className="group flex flex-col justify-between h-full w-full"
+                            >
+                              <div>
+                                <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                                  {product.image ? (
+                                    <img
+                                      src={product.image}
+                                      alt={product.name}
+                                      loading="lazy"
+                                      decoding="async"
+                                      className="w-full h-full object-cover rounded-none group-hover:scale-105 transition-transform duration-300"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLImageElement).src =
+                                          "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                      }}
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
+                                      <Package size={20} className="text-[#ffd025]/70" />
+                                      <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
                                     </div>
+                                  )}
 
-                                    <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
-                                      <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
-                                        ${Number(product.price || 0).toLocaleString("es-CL")}
+                                  {product.oferta && (
+                                    <div className="absolute top-0 left-0 z-10">
+                                      <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-none shadow">
+                                        OFERTA
                                       </span>
-
-                                      <button
-                                        onClick={() => handleAddToCartClick(product)}
-                                        disabled={!isStoreOpen}
-                                        className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                                        title="Añadir al carrito"
-                                        aria-label="Añadir al carrito"
-                                      >
-                                        <Plus size={12} strokeWidth={2.5} />
-                                        <span className="hidden sm:inline text-[10px]">Añadir</span>
-                                      </button>
                                     </div>
-                                  </div>
-                                ))}
+                                  )}
+                                </div>
+
+                                <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
+                                  {(product.subcategory || product.category || product.aisle) ? (
+                                    <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                                      {product.subcategory || product.category || product.aisle}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[7.5px] sm:text-[9px] font-medium uppercase tracking-wider text-transparent select-none">
+                                      -
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4
+                                  title={product.name}
+                                  className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                                >
+                                  {product.name}
+                                </h4>
+                              </div>
+
+                              <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
+                                <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                                  ${Number(product.price || 0).toLocaleString("es-CL")}
+                                </span>
+
+                                <button
+                                  onClick={() => handleAddToCartClick(product)}
+                                  disabled={!isStoreOpen}
+                                  className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                  title="Añadir al carrito"
+                                  aria-label="Añadir al carrito"
+                                >
+                                  <Plus size={12} strokeWidth={2.5} />
+                                  <span className="hidden sm:inline text-[10px]">Añadir</span>
+                                </button>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-6 sm:space-y-8">
+                          {activeAisles.map((aisleName) => {
+                            const rawAisleProducts = groupedByAisle[aisleName] || [];
+                            if (rawAisleProducts.length === 0) return null;
+                            const aisleProducts = isFiltered ? rawAisleProducts : rawAisleProducts.slice(0, 4);
+
+                            return (
+                              <div key={aisleName} id={`aisle-${normalize(aisleName)}`} className="scroll-mt-24">
+                                {/* GRILLA DE PRODUCTOS DEL PASILLO */}
+                                <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-4 gap-x-2.5 sm:gap-x-3.5 gap-y-4 sm:gap-y-6 items-stretch w-full">
+                                  {aisleProducts.map((product) => (
+                                    <div
+                                      key={product.id}
+                                      className="group flex flex-col justify-between h-full w-full"
+                                    >
+                                      <div>
+                                        <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                                          {product.image ? (
+                                            <img
+                                              src={product.image}
+                                              alt={product.name}
+                                              loading="lazy"
+                                              decoding="async"
+                                              className="w-full h-full object-cover rounded-none group-hover:scale-105 transition-transform duration-300"
+                                              onError={(e) => {
+                                                (e.currentTarget as HTMLImageElement).src =
+                                                  "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                              }}
+                                            />
+                                          ) : (
+                                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
+                                              <Package size={20} className="text-[#ffd025]/70" />
+                                              <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
+                                            </div>
+                                          )}
+
+                                          {product.oferta && (
+                                            <div className="absolute top-0 left-0 z-10">
+                                              <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-wider rounded-none shadow">
+                                                OFERTA
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
+                                          {(product.subcategory || product.category || product.aisle) ? (
+                                            <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                                              {product.subcategory || product.category || product.aisle}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[7.5px] sm:text-[9px] font-medium uppercase tracking-wider text-transparent select-none">
+                                              -
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <h4
+                                          title={product.name}
+                                          className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                                        >
+                                          {product.name}
+                                        </h4>
+                                      </div>
+
+                                      <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
+                                        <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                                          ${Number(product.price || 0).toLocaleString("es-CL")}
+                                        </span>
+
+                                        <button
+                                          onClick={() => handleAddToCartClick(product)}
+                                          disabled={!isStoreOpen}
+                                          className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                          title="Añadir al carrito"
+                                          aria-label="Añadir al carrito"
+                                        >
+                                          <Plus size={12} strokeWidth={2.5} />
+                                          <span className="hidden sm:inline text-[10px]">Añadir</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Botón Ver catálogo completo al final */}
                       {!isFiltered && (
@@ -3998,18 +4076,19 @@ export default function Storefront() {
             </>
           )}
 
-          <footer className="mt-6 sm:mt-8 pt-6 pb-6 border-t border-white/10 bg-black/60 text-gray-400">
-            <div className="w-full px-4 sm:px-8 md:px-10 lg:px-12">
-              {/* Distribución exacta en 2 Columnas con línea divisoria central */}
-              <div className="grid grid-cols-2 gap-3 sm:gap-8 items-start">
+          {/* PIE DE PÁGINA: EXACTAMENTE EL DISEÑO ANTERIOR EN 2 COLUMNAS CON LÍNEA CENTRAL, AMPLIO A LO ANCHO */}
+          <footer className="mt-5 sm:mt-8 pt-5 pb-5 border-t border-white/10 bg-black/60 text-gray-400">
+            <div className="w-full px-2.5 sm:px-6 md:px-8 lg:px-10">
+              {/* Distribución en 2 Columnas con línea divisoria central, amplia a lo ancho */}
+              <div className="w-full grid grid-cols-2 gap-2.5 sm:gap-6 items-start">
                 {/* COLUMNA 1: Logo y Descripción de la Tienda */}
-                <div className="flex flex-col items-start gap-2.5 pr-3 sm:pr-8 border-r border-white/15 h-full">
-                  <div className="flex items-center justify-start min-h-[32px] sm:min-h-[40px]">
+                <div className="flex flex-col items-start gap-2 pr-2.5 sm:pr-6 border-r border-white/15 h-full">
+                  <div className="flex items-center justify-start min-h-[30px] sm:min-h-[40px]">
                     {settings.footerLogo || settings.logo ? (
                       <img
                         src={settings.footerLogo || settings.logo}
                         alt={settings.pageTitle || "Tienda"}
-                        className="h-8 sm:h-11 w-auto max-w-[120px] sm:max-w-[160px] object-contain"
+                        className="h-8 sm:h-11 w-auto max-w-[130px] sm:max-w-[170px] object-contain"
                       />
                     ) : (
                       <h3 className="text-xs sm:text-base font-black tracking-wider text-[#ffd025] uppercase">
@@ -4017,15 +4096,15 @@ export default function Storefront() {
                       </h3>
                     )}
                   </div>
-                  <p className="text-[10px] sm:text-xs text-gray-300 leading-snug line-clamp-2 max-w-sm m-0">
+                  <p className="text-[10px] sm:text-xs text-gray-300 leading-snug line-clamp-2 max-w-full m-0">
                     {settings.footerDescription || settings.bannerDescription || "Tu botillería y minimarket de confianza. Cervezas heladas, destilados, snacks y delivery rápido."}
                   </p>
                 </div>
 
                 {/* COLUMNA 2: Redes Sociales y justo debajo los Pasillos de la página */}
-                <div className="flex flex-col items-end gap-3 text-right pl-2 sm:pl-4">
+                <div className="flex flex-col items-end gap-2.5 text-right pl-2 sm:pl-4">
                   {/* Redes Sociales */}
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1.5 sm:gap-2">
                     <a
                       href={settings.socialInstagram || "https://instagram.com"}
                       target="_blank"
@@ -4062,8 +4141,8 @@ export default function Storefront() {
                     </a>
                   </div>
 
-                  {/* Justo debajo los Pasillos de la página */}
-                  <div className="w-full flex flex-wrap justify-end gap-x-2.5 gap-y-1">
+                  {/* Justo debajo los Pasillos de la página: Máximo 4 opciones + Ver más */}
+                  <div className="w-full flex flex-wrap justify-end gap-x-2 gap-y-1">
                     <button
                       onClick={() => {
                         setActiveCategory("");
@@ -4087,41 +4166,52 @@ export default function Storefront() {
                         ).length;
                         return count > 0;
                       })
-                      .slice(0, 6)
+                      .slice(0, 3)
                       .map((item) => {
-                      const isAisleSelected = activeAisle === item;
-                      const isCategorySelected = activeCategory === item;
-                      const isSelected = isAisleSelected || isCategorySelected;
-                      return (
-                        <button
-                          key={item}
-                          onClick={() => {
-                            setNavQuickFilter("");
-                            if (aisles.includes(item)) {
-                              setActiveCategory("");
-                              setActiveAisle(item);
-                            } else {
-                              setActiveAisle("");
-                              setActiveCategory(item);
-                            }
-                            window.scrollTo({ top: 0, behavior: "smooth" });
-                          }}
-                          className={`text-[9.5px] sm:text-[11px] uppercase tracking-wider transition-colors ${
-                            isSelected
-                              ? "text-[#ffd025] font-black"
-                              : "text-gray-400 hover:text-white font-medium"
-                          }`}
-                        >
-                          {item}
-                        </button>
-                      );
-                    })}
+                        const isAisleSelected = activeAisle === item;
+                        const isCategorySelected = activeCategory === item;
+                        const isSelected = isAisleSelected || isCategorySelected;
+                        return (
+                          <button
+                            key={item}
+                            onClick={() => {
+                              setNavQuickFilter("");
+                              if (aisles.includes(item)) {
+                                setActiveCategory("");
+                                setActiveAisle(item);
+                              } else {
+                                setActiveAisle("");
+                                setActiveCategory(item);
+                              }
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                            className={`text-[9.5px] sm:text-[11px] uppercase tracking-wider transition-colors ${
+                              isSelected
+                                ? "text-[#ffd025] font-black"
+                                : "text-gray-400 hover:text-white font-medium"
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+
+                    {/* Botón Ver más que devuelve suavemente al encabezado para ver el menú completo */}
+                    <button
+                      onClick={() => {
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="text-[9.5px] sm:text-[11px] uppercase tracking-wider transition-colors text-[#ffd025] hover:text-[#ffe066] font-bold flex items-center gap-0.5 cursor-pointer ml-1"
+                      title="Ver el menú completo en el encabezado"
+                    >
+                      <span>Ver más ↑</span>
+                    </button>
                   </div>
                 </div>
               </div>
 
               {/* Derechos de Autor y Créditos de Agencia / Desarrollador (Una sola línea breve) */}
-              <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-[9.5px] sm:text-[11px] text-gray-400 uppercase tracking-wider">
+              <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[9.5px] sm:text-[11px] text-gray-400 uppercase tracking-wider">
                 <span className="font-semibold truncate">
                   © {settings.pageTitle || "FELLA'S MARKET"}
                 </span>
@@ -4607,6 +4697,7 @@ export default function Storefront() {
               </div>
               {[
                 { id: "products", label: "Productos", icon: Package, desc: "Catálogo, fotos y stock" },
+                { id: "collections", label: "Nuestras Colecciones", icon: LayoutGrid, desc: "4 productos en portada" },
                 { id: "media", label: "Archivo de Imágenes", icon: FolderOpen, desc: "Subida en grupo y galería" },
                 { id: "classifications", label: "Clasificaciones", icon: Tag, desc: "Categorías y pasillos" },
                 { id: "contingency", label: "Tienda Contingencia", icon: AlertTriangle, desc: "Pasillos y catálogo reducido" },
@@ -4701,6 +4792,7 @@ export default function Storefront() {
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto custom-admin-scrollbar">
                   {[
                     { id: "products", label: "Productos", icon: Package },
+                    { id: "collections", label: "Nuestras Colecciones", icon: LayoutGrid },
                     { id: "media", label: "Archivo de Imágenes", icon: FolderOpen },
                     { id: "classifications", label: "Clasificaciones", icon: Tag },
                     { id: "contingency", label: "Tienda Contingencia", icon: AlertTriangle },
@@ -4752,6 +4844,7 @@ export default function Storefront() {
               <div>
                 <h1 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
                   {adminTab === "products" && "📦 Gestión de Productos y Catálogo"}
+                  {adminTab === "collections" && "✨ Sección Nuestras Colecciones (#NUESTRASCOLECCIONES)"}
                   {adminTab === "media" && "📁 Archivo de Imágenes y Galería de Medios"}
                   {adminTab === "classifications" && "🏷️ Clasificaciones, Categorías y Pasillos"}
                   {adminTab === "orders" && "📋 Control de Pedidos y Comandas"}
@@ -4782,6 +4875,434 @@ export default function Storefront() {
 
             {/* Main Content Padding */}
             <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+              {adminTab === "collections" && (
+                <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
+                  {/* Encabezado Principal */}
+                  <div className="bg-[#13131f]/90 backdrop-blur-2xl p-6 sm:p-7 rounded-3xl border border-[#ffd025]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl shadow-black/60">
+                    <div>
+                      <div className="flex items-center gap-2 text-xs font-bold text-[#ffd025] uppercase tracking-wider mb-1">
+                        <LayoutGrid size={15} /> Portada Pública & Móvil
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-black text-white uppercase flex items-center gap-2">
+                        Sección Nuestras Colecciones (#NUESTRASCOLECCIONES)
+                      </h2>
+                      <p className="text-xs text-gray-400 mt-1 max-w-2xl">
+                        Configuración independiente: elige y ordena exactamente los <strong className="text-white">4 productos</strong> que estarán a la vista de los clientes en la portada. Para ver más productos, los clientes presionan el botón &quot;Ver catálogo completo&quot;.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={saveSettings}
+                        className="px-5 py-2.5 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-xl font-black uppercase text-xs tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#ffd025]/20 flex items-center gap-2"
+                      >
+                        <CheckCircle size={15} /> Guardar a la Nube
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tarjeta de Banner Panorámico de la Sección */}
+                  <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                      <div>
+                        <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider block">
+                          Banner Panorámico de Nuestras Colecciones
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Imagen de cabecera que se visualiza arriba de la cuadrícula de los 4 productos.
+                        </p>
+                      </div>
+                      {settingsDraft.aislesBannerImage && (
+                        <span className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2.5 py-1 rounded-full font-bold">
+                          Banner Activo
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                      <div className="md:col-span-1">
+                        <div className="relative aspect-[16/7] w-full rounded-2xl overflow-hidden bg-black/60 border border-white/10 shadow">
+                          {settingsDraft.aislesBannerImage ? (
+                            <img
+                              src={settingsDraft.aislesBannerImage}
+                              alt="Banner Colecciones"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 p-4 text-center">
+                              <ImageIcon size={24} className="mb-1 text-gray-400" />
+                              <span className="text-[10px]">Sin imagen personalizada</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2 space-y-2.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={settingsDraft.aislesBannerImage || ""}
+                            onChange={(e) =>
+                              setSettingsDraft((p) => ({ ...p, aislesBannerImage: e.target.value }))
+                            }
+                            onBlur={(e) =>
+                              resolveImageUrl(e.target.value, (r) =>
+                                setSettingsDraft((p) => ({ ...p, aislesBannerImage: r }))
+                              )
+                            }
+                            className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                            placeholder="URL de la imagen panorámica"
+                          />
+                          <label
+                            className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5"
+                            title="Subir archivo desde el dispositivo"
+                          >
+                            <Upload size={14} />
+                            <span className="hidden sm:inline">Subir</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                handleImageUpload(e, (url) =>
+                                  setSettingsDraft((p) => ({ ...p, aislesBannerImage: url }))
+                                )
+                              }
+                            />
+                          </label>
+                          {settingsDraft.aislesBannerImage && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSettingsDraft((p) => ({ ...p, aislesBannerImage: "" }))
+                              }
+                              className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition-colors border border-red-500/20 text-xs shrink-0"
+                              title="Restaurar por defecto"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-400">
+                          Recomendado: Imagen horizontal panorámica (1200x500 px aprox).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* LOS 4 ESPACIOS / SLOTS FIJOS */}
+                  <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider block">
+                            Los 4 Productos Fijos en Portada
+                          </span>
+                          <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                            {(settingsDraft.homeCollectionProductIds ?? []).length} / 4 productos
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Organiza el orden de aparición arrastrando o usando las flechas. Máximo 4 productos a la vista.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const first4 = products.filter((p) => !p.hidden).slice(0, 4).map((p) => p.id);
+                            setSettingsDraft((p) => ({ ...p, homeCollectionProductIds: first4 }));
+                            showToast("Cargados los primeros 4 del catálogo");
+                          }}
+                          className="px-3 py-1.5 bg-[#ffd025]/10 hover:bg-[#ffd025]/20 text-[#ffd025] border border-[#ffd025]/30 rounded-xl text-[10px] font-bold uppercase transition-colors"
+                        >
+                          ⚡ Primeros 4
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const ofertas = products.filter((p) => !p.hidden && p.oferta).slice(0, 4).map((p) => p.id);
+                            if (ofertas.length === 0) {
+                              showToast("No hay productos con etiqueta de oferta");
+                              return;
+                            }
+                            setSettingsDraft((p) => ({ ...p, homeCollectionProductIds: ofertas }));
+                            showToast("Cargadas ofertas a colecciones");
+                          }}
+                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-[10px] font-bold uppercase transition-colors"
+                        >
+                          🔥 4 Ofertas
+                        </button>
+                        {(settingsDraft.homeCollectionProductIds ?? []).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSettingsDraft((p) => ({ ...p, homeCollectionProductIds: [] }));
+                              showToast("Selección de colecciones limpiada");
+                            }}
+                            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-xl text-[10px] font-bold uppercase transition-colors border border-white/10"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Grid de los 4 Slots */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      {Array.from({ length: 4 }).map((_, slotIdx) => {
+                        const prodId = (settingsDraft.homeCollectionProductIds ?? [])[slotIdx];
+                        const prod = prodId ? products.find((p) => p.id === prodId) : null;
+
+                        if (!prod) {
+                          return (
+                            <div
+                              key={slotIdx}
+                              className="h-56 rounded-2xl border-2 border-dashed border-white/15 bg-black/30 p-4 flex flex-col items-center justify-center text-center group hover:border-[#ffd025]/40 transition-colors"
+                            >
+                              <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-gray-400 mb-2 font-black text-sm">
+                                #{slotIdx + 1}
+                              </div>
+                              <span className="text-xs font-bold text-gray-300 mb-1">Posición #{slotIdx + 1} Disponible</span>
+                              <span className="text-[11px] text-gray-500 leading-tight">
+                                Selecciona un producto del catálogo abajo para asignarlo aquí.
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={prod.id}
+                            className="rounded-2xl border border-white/15 bg-[#12121d] p-3 flex flex-col justify-between shadow-xl relative group"
+                          >
+                            <div>
+                              <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-black mb-2.5">
+                                {prod.image ? (
+                                  <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-white/5">
+                                    <Package size={24} className="text-gray-500" />
+                                  </div>
+                                )}
+                                <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#ffd025] text-black text-[10px] font-black rounded-md shadow">
+                                  Posición #{slotIdx + 1}
+                                </span>
+                                {prod.oferta && (
+                                  <span className="absolute top-2 right-2 px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-black rounded shadow">
+                                    OFERTA
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[9.5px] uppercase font-bold text-gray-400 truncate mb-0.5">
+                                {prod.category || prod.aisle || "Sin categoría"}
+                              </div>
+                              <p className="text-xs font-bold text-white line-clamp-2 leading-tight min-h-[28px]">{prod.name}</p>
+                              <p className="text-sm text-[#ffd025] font-black mt-1">
+                                ${Number(prod.price || 0).toLocaleString("es-CL")}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-white/10">
+                              <div className="flex items-center gap-1">
+                                {slotIdx > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const list = [...(settingsDraft.homeCollectionProductIds ?? [])];
+                                      const tmp = list[slotIdx];
+                                      list[slotIdx] = list[slotIdx - 1]!;
+                                      list[slotIdx - 1] = tmp!;
+                                      setSettingsDraft((p) => ({ ...p, homeCollectionProductIds: list }));
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                                    title="Mover a posición anterior"
+                                  >
+                                    <ArrowLeft size={13} />
+                                  </button>
+                                )}
+                                {slotIdx < (settingsDraft.homeCollectionProductIds ?? []).length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const list = [...(settingsDraft.homeCollectionProductIds ?? [])];
+                                      const tmp = list[slotIdx];
+                                      list[slotIdx] = list[slotIdx + 1]!;
+                                      list[slotIdx + 1] = tmp!;
+                                      setSettingsDraft((p) => ({ ...p, homeCollectionProductIds: list }));
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+                                    title="Mover a posición siguiente"
+                                  >
+                                    <ChevronRight size={13} />
+                                  </button>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSettingsDraft((p) => ({
+                                    ...p,
+                                    homeCollectionProductIds: (p.homeCollectionProductIds ?? []).filter((x) => x !== prod.id),
+                                  }));
+                                }}
+                                className="px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                title="Quitar de Colecciones"
+                              >
+                                <X size={13} /> Quitar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Buscador y Selección de Productos desde el Catálogo */}
+                  <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider block">
+                          Catálogo de Productos Disponibles
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Haz clic en &quot;Asignar&quot; para agregar un producto a uno de los 4 espacios disponibles.
+                        </p>
+                      </div>
+                      <div className="relative w-full sm:w-72">
+                        <input
+                          type="text"
+                          value={featuredCollecSearch}
+                          onChange={(e) => setFeaturedCollecSearch(e.target.value)}
+                          placeholder="Buscar por nombre, categoría, pasillo..."
+                          className="w-full bg-[#12121d] border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-xs focus:border-[#ffd025] pl-8"
+                        />
+                        <Search size={14} className="absolute left-2.5 top-3 text-gray-400 pointer-events-none" />
+                        {featuredCollecSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setFeaturedCollecSearch("")}
+                            className="absolute right-2.5 top-3 text-gray-400 hover:text-white"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Grid del Catálogo */}
+                    <div className="max-h-96 overflow-y-auto pr-1 space-y-2 custom-admin-scrollbar">
+                      {products
+                        .filter((p) => !p.hidden)
+                        .filter((p) => {
+                          if (!featuredCollecSearch.trim()) return true;
+                          const q = featuredCollecSearch.toLowerCase();
+                          return (
+                            p.name.toLowerCase().includes(q) ||
+                            (p.category && p.category.toLowerCase().includes(q)) ||
+                            (p.aisle && p.aisle.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((product) => {
+                          const currentList = settingsDraft.homeCollectionProductIds ?? [];
+                          const isSelected = currentList.includes(product.id);
+                          const slotPos = isSelected ? currentList.indexOf(product.id) + 1 : -1;
+                          const isFull = currentList.length >= 4;
+
+                          return (
+                            <div
+                              key={product.id}
+                              className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                                isSelected
+                                  ? "bg-cyan-500/10 border-cyan-500/40 text-white"
+                                  : "bg-[#141420] border-white/5 text-gray-300 hover:border-white/15"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-12 h-12 rounded-xl bg-black overflow-hidden shrink-0 border border-white/10">
+                                  {product.image ? (
+                                    <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-500">
+                                      <Package size={16} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white truncate">{product.name}</p>
+                                  <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
+                                    <span>{product.category || product.aisle || "General"}</span>
+                                    <span>•</span>
+                                    <span className="text-[#ffd025] font-black">${Number(product.price || 0).toLocaleString("es-CL")}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                {isSelected ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase text-cyan-300 bg-cyan-500/20 border border-cyan-500/30 px-2.5 py-1 rounded-lg">
+                                      ✓ Posición #{slotPos}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSettingsDraft((p) => ({
+                                          ...p,
+                                          homeCollectionProductIds: (p.homeCollectionProductIds ?? []).filter((x) => x !== product.id),
+                                        }));
+                                      }}
+                                      className="px-2.5 py-1 bg-white/5 hover:bg-red-500/20 hover:text-red-300 text-gray-400 rounded-lg text-xs font-bold border border-white/10 transition-colors"
+                                    >
+                                      Quitar
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={isFull}
+                                    onClick={() => {
+                                      if (isFull) {
+                                        showToast("Solo se permiten 4 productos. Quita uno antes de añadir otro.");
+                                        return;
+                                      }
+                                      setSettingsDraft((p) => ({
+                                        ...p,
+                                        homeCollectionProductIds: [...(p.homeCollectionProductIds ?? []), product.id],
+                                      }));
+                                      showToast(`Producto agregado a Posición #${(settingsDraft.homeCollectionProductIds ?? []).length + 1}`);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+                                      isFull
+                                        ? "bg-white/5 text-gray-600 cursor-not-allowed border border-white/5"
+                                        : "bg-[#ffd025] text-black hover:bg-[#e5b81a] shadow"
+                                    }`}
+                                  >
+                                    <Plus size={13} /> {isFull ? "Lleno (4/4)" : "Asignar"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Botón Guardar Flotante / Inferior */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={saveSettings}
+                      className="w-full py-4 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-2xl font-black uppercase text-sm tracking-wider hover:scale-[1.005] active:scale-[0.99] transition-all shadow-xl shadow-[#ffd025]/20 flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle size={18} /> Guardar Selección de Nuestras Colecciones a la Nube
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {adminTab === "media" && <MediaAdminPanel onMediaDeleted={refreshMenu} />}
               {adminTab === "orders" && <OrdersAdminPanel role={adminRole ?? "full"} />}
 
@@ -5513,7 +6034,7 @@ export default function Storefront() {
                               </span>
                             </div>
                             <p className="text-xs text-gray-400 mt-0.5">
-                              Elige manualmente los productos de Promociones del Tío Fellas (hasta 4 en PC / 3 en celular) y los 6 productos iniciales de Colecciones antes de abrir el catálogo completo.
+                              Elige manualmente los productos de Promociones del Tío Fellas (hasta 4 en PC / 3 en celular) y los 4 productos iniciales de Colecciones antes de abrir el catálogo completo.
                             </p>
                           </div>
                         </div>
@@ -5759,24 +6280,31 @@ export default function Storefront() {
                                     B. Productos Destacados en #NUESTRASCOLECCIONES (Vista Celular y PC)
                                   </span>
                                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
-                                    {(settingsDraft.homeCollectionProductIds ?? []).length} / 6 productos
+                                    {(settingsDraft.homeCollectionProductIds ?? []).length} / 4 productos
                                   </span>
                                 </div>
                                 <p className="text-[11px] text-gray-400 mt-0.5">
-                                  Estos son exactamente los 6 productos destacados que verá el cliente en su celular y en computador antes de hacer clic en "Ver más" / "Ver catálogo completo".
+                                  Estos son exactamente los 4 productos destacados que verá el cliente en su celular y en computador antes de hacer clic en "Ver más" / "Ver catálogo completo".
                                 </p>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <button
                                   type="button"
+                                  onClick={() => setAdminTab("collections")}
+                                  className="px-3 py-1.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black rounded-xl text-[10px] font-black uppercase transition-colors flex items-center gap-1 shadow"
+                                >
+                                  <LayoutGrid size={12} /> Ir al Área Dedicada
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => {
-                                    const first6 = products.filter((p) => !p.hidden).slice(0, 6).map((p) => p.id);
-                                    setSettingsDraft((p) => ({ ...p, homeCollectionProductIds: first6 }));
-                                    showToast("Cargados los primeros 6 del catálogo");
+                                    const first4 = products.filter((p) => !p.hidden).slice(0, 4).map((p) => p.id);
+                                    setSettingsDraft((p) => ({ ...p, homeCollectionProductIds: first4 }));
+                                    showToast("Cargados los primeros 4 del catálogo");
                                   }}
                                   className="px-3 py-1.5 bg-[#ffd025]/10 hover:bg-[#ffd025]/20 text-[#ffd025] border border-[#ffd025]/30 rounded-xl text-[10px] font-bold uppercase transition-colors"
                                 >
-                                  ⚡ Cargar Primeros 6
+                                  ⚡ Cargar Primeros 4
                                 </button>
                                 {(settingsDraft.homeCollectionProductIds ?? []).length > 0 && (
                                   <button
@@ -5796,10 +6324,10 @@ export default function Storefront() {
                             {/* Lista visual de las 6 posiciones fijas */}
                             <div>
                               <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block mb-2">
-                                Vista previa de los 6 productos iniciales para móvil:
+                                Vista previa de los 4 productos iniciales para portada:
                               </span>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                                {Array.from({ length: 6 }).map((_, slotIdx) => {
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {Array.from({ length: 4 }).map((_, slotIdx) => {
                                   const prodId = (settingsDraft.homeCollectionProductIds ?? [])[slotIdx];
                                   const prod = prodId ? products.find((p) => p.id === prodId) : null;
 
@@ -5896,7 +6424,7 @@ export default function Storefront() {
                             {/* Buscador de catálogo para añadir a Colecciones */}
                             <div className="pt-2 border-t border-white/5 space-y-2">
                               <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
-                                Buscar y añadir productos a los 6 iniciales:
+                                Buscar y añadir productos a los 4 iniciales:
                               </span>
                               <input
                                 type="text"
@@ -5920,7 +6448,7 @@ export default function Storefront() {
                                   .slice(0, 30)
                                   .map((product) => {
                                     const isSelected = (settingsDraft.homeCollectionProductIds ?? []).includes(product.id);
-                                    const isFull = (settingsDraft.homeCollectionProductIds ?? []).length >= 6;
+                                    const isFull = (settingsDraft.homeCollectionProductIds ?? []).length >= 4;
                                     return (
                                       <div
                                         key={product.id}
@@ -9119,14 +9647,12 @@ export default function Storefront() {
                             <button
                               type="button"
                               onClick={() => {
-                                setAdminTab("settings");
-                                setSettingsSubTab("featured");
-                                setOpenSettingsSections((p) => ({ ...p, featured: true }));
+                                setAdminTab("collections");
                               }}
                               className="px-3.5 py-2 bg-[#ffd025]/15 border border-[#ffd025]/30 text-[#ffd025] hover:bg-[#ffd025]/25 rounded-xl font-bold text-xs uppercase flex items-center gap-1.5 transition-all"
-                              title="Seleccionar productos de Promociones y Colecciones de Celular"
+                              title="Configurar los 4 productos de Nuestras Colecciones"
                             >
-                              <Star size={14} /> Destacados & Colecciones
+                              <LayoutGrid size={14} /> Nuestras Colecciones (4)
                             </button>
                           </div>
                         )}
