@@ -63,6 +63,7 @@ declare module "@workspace/api-client-react" {
     contingencyAislesConfig?: Record<string, { enabled?: boolean; bannerImage?: string; noticeText?: string; productIds?: number[] }>;
     promoBannerImage?: string;
     aislesBannerImage?: string;
+    aisleBanners?: Record<string, string>;
     homeCollectionProductIds?: number[];
     recommendedProductIds?: number[];
     opportunitiesBannerImage?: string;
@@ -260,8 +261,11 @@ const DEFAULT_AISLE_BANNERS: Record<string, string> = {
   dulces: "https://images.unsplash.com/photo-1582293041079-7814c2f12063?w=1600&auto=format&fit=crop&q=80",
 };
 
-function getAisleBannerImage(aisleName?: string, customImage?: string): string {
+function getAisleBannerImage(aisleName?: string, customImage?: string, settingsAisleBanners?: Record<string, string>): string {
   if (customImage && customImage.trim().length > 0) return customImage;
+  if (aisleName && settingsAisleBanners && settingsAisleBanners[aisleName]?.trim()) {
+    return settingsAisleBanners[aisleName]!;
+  }
   if (!aisleName) return "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80";
   const nameNorm = aisleName.toLowerCase();
   if (/cerveza|beer|chela|lager|ipa|stout|pilsen/.test(nameNorm)) return DEFAULT_AISLE_BANNERS.cervezas;
@@ -677,7 +681,7 @@ export default function Storefront() {
     { product: Product; selectedOption: string } | null
   >(null);
   const [adminTab, setAdminTab] =
-    useState<"products" | "recommended" | "collections" | "media" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
+    useState<"products" | "recommended" | "collections" | "banners" | "media" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [quickMediaImages, setQuickMediaImages] = useState<MediaItem[]>([]);
 
@@ -885,6 +889,8 @@ export default function Storefront() {
   const [featuredCollecSearch, setFeaturedCollecSearch] = useState("");
   const [featuredOportunidadesSearch, setFeaturedOportunidadesSearch] = useState("");
   const [featuredPacksSearch, setFeaturedPacksSearch] = useState("");
+  const [bannerFilterTab, setBannerFilterTab] = useState<"all" | "hero" | "sections" | "aisles" | "others">("all");
+  const [bannerAisleSearch, setBannerAisleSearch] = useState("");
   const toggleSettingsSection = (sec: string) => {
     setOpenSettingsSections((p) => ({ ...p, [sec]: !p[sec] }));
   };
@@ -4670,6 +4676,7 @@ export default function Storefront() {
                 { id: "products", label: "Productos", icon: Package, desc: "Catálogo, fotos y stock" },
                 { id: "recommended", label: "Nuestros Recomendados", icon: Sparkles, desc: "4 productos y banner promo" },
                 { id: "collections", label: "Nuestras Colecciones", icon: LayoutGrid, desc: "4 productos en portada" },
+                { id: "banners", label: "Banners y Portadas", icon: ImageIcon, desc: "Carrusel, pasillos, promos y packs" },
                 { id: "media", label: "Archivo de Imágenes", icon: FolderOpen, desc: "Subida en grupo y galería" },
                 { id: "classifications", label: "Clasificaciones", icon: Tag, desc: "Categorías y pasillos" },
                 { id: "contingency", label: "Tienda Contingencia", icon: AlertTriangle, desc: "Pasillos y catálogo reducido" },
@@ -4766,6 +4773,7 @@ export default function Storefront() {
                     { id: "products", label: "Productos", icon: Package },
                     { id: "recommended", label: "Nuestros Recomendados", icon: Sparkles },
                     { id: "collections", label: "Nuestras Colecciones", icon: LayoutGrid },
+                    { id: "banners", label: "Banners y Portadas", icon: ImageIcon },
                     { id: "media", label: "Archivo de Imágenes", icon: FolderOpen },
                     { id: "classifications", label: "Clasificaciones", icon: Tag },
                     { id: "contingency", label: "Tienda Contingencia", icon: AlertTriangle },
@@ -4819,6 +4827,7 @@ export default function Storefront() {
                   {adminTab === "products" && "📦 Gestión de Productos y Catálogo"}
                   {adminTab === "recommended" && "⭐ Sección Nuestros Recomendados (#NUESTROSRECOMENDADOS)"}
                   {adminTab === "collections" && "✨ Sección Nuestras Colecciones (#NUESTRASCOLECCIONES)"}
+                  {adminTab === "banners" && "🖼️ Gestor General de Banners y Portadas"}
                   {adminTab === "media" && "📁 Archivo de Imágenes y Galería de Medios"}
                   {adminTab === "classifications" && "🏷️ Clasificaciones, Categorías y Pasillos"}
                   {adminTab === "orders" && "📋 Control de Pedidos y Comandas"}
@@ -5707,6 +5716,821 @@ export default function Storefront() {
                 </div>
               )}
 
+              {adminTab === "banners" && (
+                <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-16">
+                  {/* Encabezado Principal */}
+                  <div className="bg-[#13131f]/90 backdrop-blur-2xl p-6 sm:p-7 rounded-3xl border border-[#ffd025]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl shadow-black/60">
+                    <div>
+                      <div className="flex items-center gap-2 text-xs font-bold text-[#ffd025] uppercase tracking-wider mb-1">
+                        <ImageIcon size={15} /> Portadas & Banners Visuales
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-black text-white uppercase flex items-center gap-2">
+                        Gestor Central de Banners de la Tienda
+                      </h2>
+                      <p className="text-xs text-gray-400 mt-1 max-w-2xl">
+                        Edita todos y cada uno de los banners de la plataforma: Carrusel principal de portada, secciones especiales (#NUESTROSRECOMENDADOS, #NUESTRASCOLECCIONES, Oportunidades, Packs) y el banner panorámico independiente para cada uno de los pasillos del catálogo.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={saveSettings}
+                        className="px-5 py-2.5 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-xl font-black uppercase text-xs tracking-wider hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#ffd025]/20 flex items-center gap-2"
+                      >
+                        <CheckCircle size={15} /> Guardar Todos los Banners
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Barra de Filtros / Navegación rápida por tipo de banner */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-admin-scrollbar">
+                    {[
+                      { id: "all", label: "🌟 Todos los Banners" },
+                      { id: "hero", label: "🎠 Carrusel Portada", count: (settingsDraft.bannerSlides ?? []).length },
+                      { id: "sections", label: "✨ Secciones Especiales (4)" },
+                      { id: "aisles", label: "🚪 Banners por Pasillo", count: allStoreAisles.length },
+                      { id: "others", label: "🛡️ Contingencia" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setBannerFilterTab(tab.id as any)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                          bannerFilterTab === tab.id
+                            ? "bg-[#ffd025] text-black shadow-lg shadow-[#ffd025]/20"
+                            : "bg-[#181826] text-gray-400 hover:text-white border border-white/5 hover:border-white/15"
+                        }`}
+                      >
+                        {tab.label}
+                        {typeof tab.count === "number" && (
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                            bannerFilterTab === tab.id ? "bg-black/20 text-black" : "bg-white/10 text-gray-300"
+                          }`}>
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* BLOQUE 1: CARRUSEL PRINCIPAL DE PORTADA */}
+                  {(bannerFilterTab === "all" || bannerFilterTab === "hero") && (
+                    <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-[#ffd025] uppercase tracking-wider block">
+                              1. Carrusel Principal de Portada (Hero Banner Slides)
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30">
+                              {(settingsDraft.bannerSlides ?? []).length} slides
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            Banners rotativos grandes que se visualizan en la parte superior de la portada principal.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newSlide: BannerSlide = { image: "", title: "", description: "" };
+                            setSettingsDraft({
+                              ...settingsDraft,
+                              bannerSlides: [...(settingsDraft.bannerSlides ?? []), newSlide],
+                            });
+                            showToast("Nuevo slide añadido al carrusel");
+                          }}
+                          className="flex items-center gap-1.5 text-xs bg-[#ffd025] text-black font-black uppercase rounded-xl px-4 py-2 hover:bg-[#e5b81a] transition-all shadow shrink-0"
+                        >
+                          <Plus size={14} /> Añadir Slide
+                        </button>
+                      </div>
+
+                      {(settingsDraft.bannerSlides ?? []).length === 0 ? (
+                        <div className="text-center py-8 border-2 border-dashed border-white/10 rounded-2xl text-gray-400 text-xs space-y-2">
+                          <ImageIcon size={32} className="mx-auto text-gray-600 mb-1" />
+                          <p>No tienes slides personalizados en el carrusel.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const sampleSlide: BannerSlide = {
+                                image: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=1600&auto=format&fit=crop&q=80",
+                                title: "¡Bienvenido a Botillería Fellas!",
+                                description: "Tus mejores tragos con despacho rápido en Alerce y Puerto Montt.",
+                              };
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                bannerSlides: [sampleSlide],
+                              });
+                              showToast("Slide de ejemplo cargado");
+                            }}
+                            className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Cargar Slide de Ejemplo
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-4">
+                          {(settingsDraft.bannerSlides ?? []).map((slide, idx) => (
+                            <div
+                              key={idx}
+                              className="rounded-2xl border border-white/10 bg-[#12121d] p-4 sm:p-5 space-y-4 shadow-lg relative group"
+                            >
+                              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black text-[#ffd025] uppercase">
+                                    Slide #{idx + 1}
+                                  </span>
+                                  {slide.title && (
+                                    <span className="text-[11px] text-gray-400 truncate max-w-xs">
+                                      · {slide.title}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {idx > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                        const tmp = slides[idx]!;
+                                        slides[idx] = slides[idx - 1]!;
+                                        slides[idx - 1] = tmp;
+                                        setSettingsDraft({ ...settingsDraft, bannerSlides: slides });
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-white bg-white/5 rounded-lg text-xs"
+                                      title="Mover arriba"
+                                    >
+                                      <ArrowUp size={13} />
+                                    </button>
+                                  )}
+                                  {idx < (settingsDraft.bannerSlides ?? []).length - 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                        const tmp = slides[idx]!;
+                                        slides[idx] = slides[idx + 1]!;
+                                        slides[idx + 1] = tmp;
+                                        setSettingsDraft({ ...settingsDraft, bannerSlides: slides });
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-white bg-white/5 rounded-lg text-xs"
+                                      title="Mover abajo"
+                                    >
+                                      <ArrowDown size={13} />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                      slides.splice(idx, 1);
+                                      setSettingsDraft({ ...settingsDraft, bannerSlides: slides });
+                                      showToast(`Slide #${idx + 1} eliminado`);
+                                    }}
+                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                  >
+                                    <X size={13} /> Eliminar
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                                <div className="md:col-span-1">
+                                  <div className="relative aspect-[16/7] w-full rounded-xl overflow-hidden bg-black border border-white/10 shadow">
+                                    {slide.image ? (
+                                      <img
+                                        src={slide.image}
+                                        alt={slide.title || `Slide ${idx + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 p-2 text-center">
+                                        <ImageIcon size={22} className="mb-1 text-gray-500" />
+                                        <span className="text-[10px]">Ingresa una URL o sube una imagen</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2.5">
+                                  <div className="flex gap-2 items-center">
+                                    <input
+                                      type="text"
+                                      value={slide.image}
+                                      onChange={(e) => {
+                                        const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                        slides[idx] = { ...slides[idx]!, image: e.target.value };
+                                        setSettingsDraft({ ...settingsDraft, bannerSlides: slides });
+                                      }}
+                                      onBlur={(e) =>
+                                        resolveImageUrl(e.target.value, (r) => {
+                                          const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                          slides[idx] = { ...slides[idx]!, image: r };
+                                          setSettingsDraft((p) => ({ ...p, bannerSlides: slides }));
+                                        })
+                                      }
+                                      className="flex-1 bg-[#161622] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                      placeholder="URL de la imagen del banner (1600x600 px)"
+                                    />
+                                    <label
+                                      className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5"
+                                      title="Subir archivo desde tu dispositivo"
+                                    >
+                                      <Upload size={14} />
+                                      <span className="hidden sm:inline">Subir</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) =>
+                                          handleImageUpload(e, (url) => {
+                                            const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                            slides[idx] = { ...slides[idx]!, image: url };
+                                            setSettingsDraft({ ...settingsDraft, bannerSlides: slides });
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <input
+                                      type="text"
+                                      value={slide.title}
+                                      onChange={(e) => {
+                                        const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                        slides[idx] = { ...slides[idx]!, title: e.target.value };
+                                        setSettingsDraft({ ...settingsDraft, bannerSlides: slides });
+                                      }}
+                                      className="w-full bg-[#161622] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                      placeholder="Título del Slide (ej: ⚡ Ofertas del Fin de Semana)"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={slide.description}
+                                      onChange={(e) => {
+                                        const slides = [...(settingsDraft.bannerSlides ?? [])];
+                                        slides[idx] = { ...slides[idx]!, description: e.target.value };
+                                        setSettingsDraft({ ...settingsDraft, bannerSlides: slides });
+                                      }}
+                                      className="w-full bg-[#161622] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                      placeholder="Descripción corta o llamado a la acción"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* BLOQUE 2: BANNERS DE SECCIONES ESPECIALES */}
+                  {(bannerFilterTab === "all" || bannerFilterTab === "sections") && (
+                    <div className="space-y-5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-[#ffd025] uppercase tracking-wider block">
+                          2. Banners de Secciones Especiales (#NUESTROSRECOMENDADOS, #NUESTRASCOLECCIONES, Oportunidades, Packs)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {/* Banner A: #NUESTROSRECOMENDADOS */}
+                        <div className="bg-[#181826] p-5 rounded-3xl border border-white/10 space-y-3 flex flex-col justify-between shadow-lg">
+                          <div>
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+                              <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider flex items-center gap-1.5">
+                                <Sparkles size={14} /> #NUESTROSRECOMENDADOS
+                              </span>
+                              <span className="text-[10px] bg-red-500/15 text-red-300 border border-red-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                                Promociones
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 mb-3">
+                              Banner horizontal que encabeza la sección de 4 productos recomendados / promociones del Tío Fellas.
+                            </p>
+                            <div className="relative aspect-[16/6] w-full rounded-xl overflow-hidden bg-black border border-white/10 mb-3 shadow">
+                              <img
+                                src={settingsDraft.promoBannerImage || "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=1600&auto=format&fit=crop&q=80"}
+                                alt="Banner Recomendados"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                value={settingsDraft.promoBannerImage || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, promoBannerImage: e.target.value })}
+                                onBlur={(e) =>
+                                  resolveImageUrl(e.target.value, (r) => setSettingsDraft((p) => ({ ...p, promoBannerImage: r })))
+                                }
+                                className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                placeholder="URL imagen panorámica (1200x500)"
+                              />
+                              <label className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5">
+                                <Upload size={14} />
+                                <span className="hidden sm:inline">Subir</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) =>
+                                    handleImageUpload(e, (url) => setSettingsDraft({ ...settingsDraft, promoBannerImage: url }))
+                                  }
+                                />
+                              </label>
+                              {settingsDraft.promoBannerImage && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSettingsDraft({ ...settingsDraft, promoBannerImage: "" })}
+                                  className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl border border-red-500/20 text-xs shrink-0"
+                                  title="Restaurar por defecto"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Banner B: #NUESTRASCOLECCIONES */}
+                        <div className="bg-[#181826] p-5 rounded-3xl border border-white/10 space-y-3 flex flex-col justify-between shadow-lg">
+                          <div>
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+                              <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider flex items-center gap-1.5">
+                                <LayoutGrid size={14} /> #NUESTRASCOLECCIONES
+                              </span>
+                              <span className="text-[10px] bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                                Colecciones
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 mb-3">
+                              Banner horizontal que encabeza la sección de 4 colecciones fijas en la portada.
+                            </p>
+                            <div className="relative aspect-[16/6] w-full rounded-xl overflow-hidden bg-black border border-white/10 mb-3 shadow">
+                              <img
+                                src={settingsDraft.aislesBannerImage || "https://images.unsplash.com/photo-1527061011665-3652c757a4d4?w=1600&auto=format&fit=crop&q=80"}
+                                alt="Banner Colecciones"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                value={settingsDraft.aislesBannerImage || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, aislesBannerImage: e.target.value })}
+                                onBlur={(e) =>
+                                  resolveImageUrl(e.target.value, (r) => setSettingsDraft((p) => ({ ...p, aislesBannerImage: r })))
+                                }
+                                className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                placeholder="URL imagen panorámica (1200x500)"
+                              />
+                              <label className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5">
+                                <Upload size={14} />
+                                <span className="hidden sm:inline">Subir</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) =>
+                                    handleImageUpload(e, (url) => setSettingsDraft({ ...settingsDraft, aislesBannerImage: url }))
+                                  }
+                                />
+                              </label>
+                              {settingsDraft.aislesBannerImage && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSettingsDraft({ ...settingsDraft, aislesBannerImage: "" })}
+                                  className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl border border-red-500/20 text-xs shrink-0"
+                                  title="Restaurar por defecto"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Banner C: Oportunidades & Ofertas */}
+                        <div className="bg-[#181826] p-5 rounded-3xl border border-white/10 space-y-3 flex flex-col justify-between shadow-lg">
+                          <div>
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+                              <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider flex items-center gap-1.5">
+                                <Flame size={14} /> Oportunidades & Ofertas
+                              </span>
+                              <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                                Descuentos
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 mb-3">
+                              Banner para la vista dedicada de Oportunidades y Rebajas del Catálogo.
+                            </p>
+                            <div className="relative aspect-[16/6] w-full rounded-xl overflow-hidden bg-black border border-white/10 mb-3 shadow">
+                              <img
+                                src={settingsDraft.opportunitiesBannerImage || "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=1600&auto=format&fit=crop&q=80"}
+                                alt="Banner Oportunidades"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                value={settingsDraft.opportunitiesBannerImage || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, opportunitiesBannerImage: e.target.value })}
+                                onBlur={(e) =>
+                                  resolveImageUrl(e.target.value, (r) => setSettingsDraft((p) => ({ ...p, opportunitiesBannerImage: r })))
+                                }
+                                className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                placeholder="URL imagen panorámica (1200x500)"
+                              />
+                              <label className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5">
+                                <Upload size={14} />
+                                <span className="hidden sm:inline">Subir</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) =>
+                                    handleImageUpload(e, (url) => setSettingsDraft({ ...settingsDraft, opportunitiesBannerImage: url }))
+                                  }
+                                />
+                              </label>
+                              {settingsDraft.opportunitiesBannerImage && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSettingsDraft({ ...settingsDraft, opportunitiesBannerImage: "" })}
+                                  className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl border border-red-500/20 text-xs shrink-0"
+                                  title="Restaurar por defecto"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                value={settingsDraft.opportunitiesBannerTitle || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, opportunitiesBannerTitle: e.target.value })}
+                                placeholder="Título (opcional)"
+                                className="bg-[#12121d] border border-white/10 rounded-xl p-2 text-white text-xs focus:border-[#ffd025]"
+                              />
+                              <input
+                                type="text"
+                                value={settingsDraft.opportunitiesBannerSubtitle || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, opportunitiesBannerSubtitle: e.target.value })}
+                                placeholder="Subtítulo (opcional)"
+                                className="bg-[#12121d] border border-white/10 rounded-xl p-2 text-white text-xs focus:border-[#ffd025]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Banner D: Packs Especiales */}
+                        <div className="bg-[#181826] p-5 rounded-3xl border border-white/10 space-y-3 flex flex-col justify-between shadow-lg">
+                          <div>
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3">
+                              <span className="text-xs font-black text-[#ffd025] uppercase tracking-wider flex items-center gap-1.5">
+                                <Package size={14} /> Packs Especiales
+                              </span>
+                              <span className="text-[10px] bg-purple-500/15 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                                Packs & Combos
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 mb-3">
+                              Banner para la vista dedicada de Packs y Promociones grupales.
+                            </p>
+                            <div className="relative aspect-[16/6] w-full rounded-xl overflow-hidden bg-black border border-white/10 mb-3 shadow">
+                              <img
+                                src={settingsDraft.packsBannerImage || "https://images.unsplash.com/photo-1543007630-9710e4a00a20?w=1600&auto=format&fit=crop&q=80"}
+                                alt="Banner Packs"
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                value={settingsDraft.packsBannerImage || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, packsBannerImage: e.target.value })}
+                                onBlur={(e) =>
+                                  resolveImageUrl(e.target.value, (r) => setSettingsDraft((p) => ({ ...p, packsBannerImage: r })))
+                                }
+                                className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                placeholder="URL imagen panorámica (1200x500)"
+                              />
+                              <label className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5">
+                                <Upload size={14} />
+                                <span className="hidden sm:inline">Subir</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) =>
+                                    handleImageUpload(e, (url) => setSettingsDraft({ ...settingsDraft, packsBannerImage: url }))
+                                  }
+                                />
+                              </label>
+                              {settingsDraft.packsBannerImage && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSettingsDraft({ ...settingsDraft, packsBannerImage: "" })}
+                                  className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl border border-red-500/20 text-xs shrink-0"
+                                  title="Restaurar por defecto"
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                value={settingsDraft.packsBannerTitle || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, packsBannerTitle: e.target.value })}
+                                placeholder="Título (opcional)"
+                                className="bg-[#12121d] border border-white/10 rounded-xl p-2 text-white text-xs focus:border-[#ffd025]"
+                              />
+                              <input
+                                type="text"
+                                value={settingsDraft.packsBannerSubtitle || ""}
+                                onChange={(e) => setSettingsDraft({ ...settingsDraft, packsBannerSubtitle: e.target.value })}
+                                placeholder="Subtítulo (opcional)"
+                                className="bg-[#12121d] border border-white/10 rounded-xl p-2 text-white text-xs focus:border-[#ffd025]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BLOQUE 3: BANNERS INDIVIDUALES PARA CADA PASILLO */}
+                  {(bannerFilterTab === "all" || bannerFilterTab === "aisles") && (
+                    <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-[#ffd025] uppercase tracking-wider block">
+                              3. Banners Independientes para Cada Pasillo de la Tienda
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#ffd025]/20 text-[#ffd025] font-bold border border-[#ffd025]/30">
+                              {allStoreAisles.length} pasillos activos
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            Cada pasillo (Cervezas, Destilados, Vinos, Snacks, etc.) tiene su propia imagen panorámica personalizada cuando el cliente lo visita.
+                          </p>
+                        </div>
+
+                        <div className="relative w-full sm:w-64">
+                          <input
+                            type="text"
+                            value={bannerAisleSearch}
+                            onChange={(e) => setBannerAisleSearch(e.target.value)}
+                            placeholder="Buscar pasillo..."
+                            className="w-full bg-[#12121d] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:border-[#ffd025] pl-8"
+                          />
+                          <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none" />
+                          {bannerAisleSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setBannerAisleSearch("")}
+                              className="absolute right-2.5 top-2.5 text-gray-400 hover:text-white"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {allStoreAisles
+                          .filter((aisleName) => {
+                            if (!bannerAisleSearch.trim()) return true;
+                            return aisleName.toLowerCase().includes(bannerAisleSearch.toLowerCase());
+                          })
+                          .map((aisleName) => {
+                            const aisleObj = aislesData.find((a) => a.name.toLowerCase() === aisleName.toLowerCase());
+                            const currentCustom = aisleObj?.bannerImage || settingsDraft.aisleBanners?.[aisleName] || "";
+                            const currentResolved = getAisleBannerImage(aisleName, currentCustom, settingsDraft.aisleBanners);
+                            const isCustom = Boolean(currentCustom && currentCustom.trim());
+
+                            const handleUpdateAisleBanner = (newUrl: string) => {
+                              setSettingsDraft((p) => ({
+                                ...p,
+                                aisleBanners: {
+                                  ...(p.aisleBanners ?? {}),
+                                  [aisleName]: newUrl,
+                                },
+                              }));
+                              if (aisleObj) {
+                                queryClient.setQueryData(
+                                  getGetMenuQueryKey(),
+                                  (old: any) =>
+                                    old
+                                      ? {
+                                          ...old,
+                                          aisles: old.aisles.map((a: any) =>
+                                            a.id === aisleObj.id ? { ...a, bannerImage: newUrl } : a
+                                          ),
+                                        }
+                                      : old
+                                );
+                                updateAisleMut.mutate({ id: aisleObj.id, data: { ...aisleObj, bannerImage: newUrl } });
+                              }
+                            };
+
+                            return (
+                              <div
+                                key={aisleName}
+                                className="rounded-2xl border border-white/10 bg-[#12121d] p-4 flex flex-col justify-between space-y-3 shadow-lg group hover:border-[#ffd025]/30 transition-all"
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-base">{subcategoryEmoji(aisleName)}</span>
+                                      <span className="text-xs font-bold text-white uppercase tracking-wider truncate">
+                                        Pasillo: {aisleName}
+                                      </span>
+                                    </div>
+                                    <span className={`text-[9.5px] px-2 py-0.5 rounded-full font-bold uppercase shrink-0 border ${
+                                      isCustom
+                                        ? "bg-green-500/15 text-green-300 border-green-500/30"
+                                        : "bg-white/5 text-gray-400 border-white/10"
+                                    }`}>
+                                      {isCustom ? "✓ Personalizado" : "Por defecto"}
+                                    </span>
+                                  </div>
+
+                                  <div className="relative aspect-[16/6] w-full rounded-xl overflow-hidden bg-black border border-white/10 mb-2.5 shadow">
+                                    <img
+                                      src={currentResolved}
+                                      alt={`Banner ${aisleName}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex gap-2 items-center">
+                                    <input
+                                      type="text"
+                                      value={currentCustom}
+                                      onChange={(e) => handleUpdateAisleBanner(e.target.value)}
+                                      onBlur={(e) =>
+                                        resolveImageUrl(e.target.value, (r) => handleUpdateAisleBanner(r))
+                                      }
+                                      className="flex-1 bg-[#161622] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                                      placeholder={`URL banner para ${aisleName}`}
+                                    />
+                                    <label
+                                      className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5"
+                                      title="Subir archivo desde el dispositivo"
+                                    >
+                                      <Upload size={14} />
+                                      <span className="hidden sm:inline">Subir</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) =>
+                                          handleImageUpload(e, (url) => {
+                                            handleUpdateAisleBanner(url);
+                                            showToast(`Banner del pasillo "${aisleName}" actualizado`);
+                                          })
+                                        }
+                                      />
+                                    </label>
+                                    {isCustom && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleUpdateAisleBanner("");
+                                          showToast(`Banner del pasillo "${aisleName}" restaurado al predeterminado`);
+                                        }}
+                                        className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl border border-red-500/20 text-xs shrink-0"
+                                        title="Restaurar a imagen por defecto"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BLOQUE 4: BANNERS DE CONTINGENCIA Y OTROS */}
+                  {(bannerFilterTab === "all" || bannerFilterTab === "others") && (
+                    <div className="bg-[#181826] p-5 sm:p-6 rounded-3xl border border-white/10 space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                        <div>
+                          <span className="text-sm font-black text-[#ffd025] uppercase tracking-wider block">
+                            4. Banner de Modo Contingencia
+                          </span>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            Banner panorámico que se muestra en la cabecera cuando la tienda opera en modo de contingencia o horario reducido.
+                          </p>
+                        </div>
+                        <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                          Contingencia
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                        <div className="md:col-span-1">
+                          <div className="relative aspect-[16/7] w-full rounded-2xl overflow-hidden bg-black border border-white/10 shadow">
+                            {settingsDraft.contingencyBannerImage ? (
+                              <img
+                                src={settingsDraft.contingencyBannerImage}
+                                alt="Banner Contingencia"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 p-4 text-center">
+                                <AlertTriangle size={24} className="mb-1 text-amber-400" />
+                                <span className="text-[10px]">Sin banner de contingencia</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-2 space-y-2.5">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={settingsDraft.contingencyBannerImage || ""}
+                              onChange={(e) => setSettingsDraft({ ...settingsDraft, contingencyBannerImage: e.target.value })}
+                              onBlur={(e) =>
+                                resolveImageUrl(e.target.value, (r) => setSettingsDraft((p) => ({ ...p, contingencyBannerImage: r })))
+                              }
+                              className="flex-1 bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025]"
+                              placeholder="URL imagen del banner de contingencia"
+                            />
+                            <label
+                              className="bg-[#ffd025]/10 text-[#ffd025] px-3.5 py-2.5 rounded-xl flex items-center cursor-pointer hover:bg-[#ffd025]/20 border border-[#ffd025]/20 shrink-0 font-bold text-xs gap-1.5"
+                              title="Subir archivo desde tu dispositivo"
+                            >
+                              <Upload size={14} />
+                              <span className="hidden sm:inline">Subir</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) =>
+                                  handleImageUpload(e, (url) => setSettingsDraft({ ...settingsDraft, contingencyBannerImage: url }))
+                                }
+                              />
+                            </label>
+                            {settingsDraft.contingencyBannerImage && (
+                              <button
+                                type="button"
+                                onClick={() => setSettingsDraft({ ...settingsDraft, contingencyBannerImage: "" })}
+                                className="p-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl border border-red-500/20 text-xs shrink-0"
+                                title="Restaurar por defecto"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-400">
+                            Recomendado: Imagen horizontal panorámica (1200x500 px aprox).
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Botón Guardar Flotante / Inferior */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={saveSettings}
+                      className="w-full py-4 bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] text-[#0a0a0f] rounded-2xl font-black uppercase text-sm tracking-wider hover:scale-[1.005] active:scale-[0.99] transition-all shadow-xl shadow-[#ffd025]/20 flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle size={18} /> Guardar Todos los Banners a la Nube
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {adminTab === "media" && <MediaAdminPanel onMediaDeleted={refreshMenu} />}
               {adminTab === "orders" && <OrdersAdminPanel role={adminRole ?? "full"} />}
 
@@ -6140,6 +6964,16 @@ export default function Storefront() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-gray-400">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAdminTab("banners");
+                            }}
+                            className="px-3 py-1.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black rounded-xl text-[10px] font-black uppercase transition-colors flex items-center gap-1 shadow shrink-0"
+                          >
+                            <ImageIcon size={12} /> Gestor de Banners
+                          </button>
                           {openSettingsSections.banners ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                         </div>
                       </button>
