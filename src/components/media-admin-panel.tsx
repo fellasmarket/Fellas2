@@ -43,33 +43,37 @@ interface MediaAdminPanelProps {
 }
 
 export const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  "Promociones & Packs": <Flame size={16} className="text-amber-400" />,
+  "Bebidas Alcohólicas": <GlassWater size={16} className="text-purple-400" />,
   "Piscos": <Wine size={16} className="text-[#ffd025]" />,
   "Cervezas": <Beer size={16} className="text-yellow-400" />,
-  "Vinos & Espumantes": <Wine size={16} className="text-purple-400" />,
+  "Vinos & Espumantes": <Wine size={16} className="text-red-400" />,
   "Destilados & Licores": <GlassWater size={16} className="text-cyan-400" />,
   "Energizantes": <Zap size={16} className="text-lime-400" />,
   "Bebidas & Gaseosas": <GlassWater size={16} className="text-emerald-400" />,
-  "Jugos & Aguas": <Droplets size={16} className="text-blue-400" />,
+  "Jugos": <Droplets size={16} className="text-amber-400" />,
+  "Aguas": <Droplets size={16} className="text-sky-400" />,
   "Cigarros & Tabacos": <Cigarette size={16} className="text-orange-400" />,
   "Snacks & Salados": <Cookie size={16} className="text-amber-500" />,
   "Dulces & Chocolates": <Candy size={16} className="text-pink-400" />,
+  "Promociones & Packs": <Flame size={16} className="text-amber-400" />,
   "Hielo & Abarrotes": <Package size={16} className="text-blue-300" />,
   "Otros / General": <FolderOpen size={16} className="text-gray-400" />,
 };
 
 export const ORDERED_SECTIONS = [
-  "Promociones & Packs",
+  "Bebidas Alcohólicas",
   "Piscos",
   "Cervezas",
   "Vinos & Espumantes",
   "Destilados & Licores",
   "Energizantes",
   "Bebidas & Gaseosas",
-  "Jugos & Aguas",
+  "Jugos",
+  "Aguas",
   "Cigarros & Tabacos",
   "Snacks & Salados",
   "Dulces & Chocolates",
+  "Promociones & Packs",
   "Hielo & Abarrotes",
   "Otros / General",
 ];
