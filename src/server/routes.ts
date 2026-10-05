@@ -57,9 +57,28 @@ export interface MediaMetaItem {
 export function normalizeCategoryMatch(catStr: string, titleStr: string = ""): ProductImageSection {
   const catNorm = String(catStr || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   const titleNorm = String(titleStr || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  const combined = `${catNorm} ${titleNorm}`;
+  const combined = `${catNorm} ${titleNorm}`.trim();
 
-  if (!combined.trim()) return "Otros / General";
+  if (!combined) return "Otros / General";
+
+  // 0. Si el título tiene un prefijo claro antes de guión, dos puntos o guión bajo (ej: "Bebidas Alcohólicas - ...", "Aguas - ...", "Jugos - ...")
+  const prefixMatch = titleNorm.split(/[-:_/]/)[0]?.trim();
+  if (prefixMatch) {
+    if (prefixMatch.includes("bebida") && prefixMatch.includes("alcohol")) return "Bebidas Alcohólicas";
+    if (prefixMatch.includes("pisco")) return "Piscos";
+    if (prefixMatch.includes("cerveza") || prefixMatch === "beer") return "Cervezas";
+    if (prefixMatch.includes("vino") || prefixMatch.includes("espumante")) return "Vinos & Espumantes";
+    if (prefixMatch.includes("destilado") || prefixMatch.includes("licor") || prefixMatch.includes("whisky") || prefixMatch.includes("ron") || prefixMatch.includes("vodka")) return "Destilados & Licores";
+    if (prefixMatch.includes("energiz") || prefixMatch.includes("energy")) return "Energizantes";
+    if (prefixMatch.includes("gaseosa") || (prefixMatch.includes("bebida") && !prefixMatch.includes("alcohol"))) return "Bebidas & Gaseosas";
+    if (prefixMatch.includes("jugo") || prefixMatch.includes("nectar")) return "Jugos";
+    if (prefixMatch.includes("agua")) return "Aguas";
+    if (prefixMatch.includes("cigarro") || prefixMatch.includes("tabaco") || prefixMatch.includes("vape")) return "Cigarros & Tabacos";
+    if (prefixMatch.includes("snack") || prefixMatch.includes("papas") || prefixMatch.includes("salado")) return "Snacks & Salados";
+    if (prefixMatch.includes("dulce") || prefixMatch.includes("chocolate") || prefixMatch.includes("galleta")) return "Dulces & Chocolates";
+    if (prefixMatch.includes("promo") || prefixMatch.includes("pack") || prefixMatch.includes("combo")) return "Promociones & Packs";
+    if (prefixMatch.includes("hielo") || prefixMatch.includes("abarrote")) return "Hielo & Abarrotes";
+  }
 
   // 1. Promociones & Packs
   if (
@@ -1939,7 +1958,7 @@ apiRouter.post("/media-library/upload-batch", async (req, res) => {
   }
 });
 
-// Clasificación / Organización masiva con Inteligencia Artificial
+// Clasificación / Organización masiva guiada por TÍTULOS de cada imagen
 apiRouter.post("/media-library/classify-ai", async (req, res) => {
   try {
     const { forceAll = false } = req.body || {};
@@ -1948,27 +1967,38 @@ apiRouter.post("/media-library/classify-ai", async (req, res) => {
 
     for (const item of currentMeta) {
       if (forceAll || !item.category || item.category === "Otros / General") {
-        let buffer: Buffer | null = null;
-        const filePath = path.join(UPLOADS_DIR, item.id);
-        const seedPath = path.join(SEED_UPLOADS_DIR, item.id);
-        if (fs.existsSync(filePath)) {
-          buffer = fs.readFileSync(filePath);
-        } else if (fs.existsSync(seedPath)) {
-          buffer = fs.readFileSync(seedPath);
-        }
+        // 1. Clasificación inmediata basada 100% en el título puesto por el usuario / ChatGPT
+        const titleCat = normalizeCategoryMatch("", item.name || item.id);
+        const cleanTitle = (item.name || item.id).replace(/\.[^/.]+$/, "").replace(/_/g, " ");
 
-        if (buffer && buffer.length > 0) {
-          const classified = await classifyImageWithAI(buffer, item.name || item.id);
-          item.category = classified.category;
-          if (classified.title) {
-            item.aiDetectedTitle = classified.title;
-          }
+        if (titleCat && titleCat !== "Otros / General") {
+          item.category = titleCat;
+          item.aiDetectedTitle = cleanTitle;
           updatedCount++;
         } else {
-          const heuristic = classifyImageHeuristic(item.name || item.id);
-          item.category = heuristic.category;
-          if (heuristic.title) item.aiDetectedTitle = heuristic.title;
-          updatedCount++;
+          // 2. Si no hay palabras clave en el título, verificar buffer / heurística
+          let buffer: Buffer | null = null;
+          const filePath = path.join(UPLOADS_DIR, item.id);
+          const seedPath = path.join(SEED_UPLOADS_DIR, item.id);
+          if (fs.existsSync(filePath)) {
+            buffer = fs.readFileSync(filePath);
+          } else if (fs.existsSync(seedPath)) {
+            buffer = fs.readFileSync(seedPath);
+          }
+
+          if (buffer && buffer.length > 0) {
+            const classified = await classifyImageWithAI(buffer, item.name || item.id);
+            item.category = classified.category;
+            if (classified.title) {
+              item.aiDetectedTitle = classified.title;
+            }
+            updatedCount++;
+          } else {
+            const heuristic = classifyImageHeuristic(item.name || item.id);
+            item.category = heuristic.category;
+            if (heuristic.title) item.aiDetectedTitle = heuristic.title;
+            updatedCount++;
+          }
         }
       }
     }
@@ -1976,7 +2006,7 @@ apiRouter.post("/media-library/classify-ai", async (req, res) => {
     saveMediaLibraryMeta(currentMeta);
     res.json({ ok: true, updatedCount, images: currentMeta, categories: PRODUCT_IMAGE_SECTIONS });
   } catch (err: any) {
-    console.error("Error in AI classification of media library:", err);
+    console.error("Error in classification of media library:", err);
     res.status(500).json({ error: "Error classifying media: " + err.message });
   }
 });
@@ -2377,3 +2407,48 @@ Reglas:
     subtitle: (subtitle || "Las mejores promos y delivery a la puerta de tu casa #Alerce"),
   });
 });
+
+// 17. Anti-Sleep Keep Alive & Client Persistence Sync
+apiRouter.get("/ping", (_req, res) => {
+  res.json({
+    ok: true,
+    status: "active",
+    serverTime: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
+    message: "Servidor activo - Fella's Market Anti-Sleep System",
+  });
+});
+
+apiRouter.get("/keep-alive", (_req, res) => {
+  res.json({ ok: true, active: true, timestamp: Date.now() });
+});
+
+// Auto-Sync payload from client LocalStorage if backend reloads or restarts
+apiRouter.post("/sync-backup", (req, res) => {
+  try {
+    const { products, mediaLibrary } = req.body || {};
+    let restoredProducts = 0;
+    let restoredMedia = 0;
+
+    if (Array.isArray(products) && products.length > 0) {
+      const currentDb = dbManager.getRaw();
+      if (!currentDb.products || currentDb.products.length === 0) {
+        dbManager.restoreRaw({ ...currentDb, products });
+        restoredProducts = products.length;
+      }
+    }
+
+    if (Array.isArray(mediaLibrary) && mediaLibrary.length > 0) {
+      const currentMeta = getMediaLibraryMeta();
+      if (currentMeta.length === 0) {
+        saveMediaLibraryMeta(mediaLibrary);
+        restoredMedia = mediaLibrary.length;
+      }
+    }
+
+    res.json({ ok: true, restoredProducts, restoredMedia });
+  } catch (err: any) {
+    res.status(500).json({ error: "Sync backup failed: " + err.message });
+  }
+});
+

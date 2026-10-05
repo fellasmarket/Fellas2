@@ -667,7 +667,13 @@ export default function Storefront() {
       const res = await fetch(`${apiBase}/media-library`);
       if (res.ok) {
         const data = await res.json();
-        setQuickMediaImages(data.images || []);
+        const imgs = data.images || [];
+        setQuickMediaImages(imgs);
+        try {
+          if (imgs.length > 0) {
+            localStorage.setItem("fellas_catalog_media", JSON.stringify(imgs));
+          }
+        } catch {}
       }
     } catch (err) {
       console.error("Error loading quick media library:", err);
@@ -700,14 +706,45 @@ export default function Storefront() {
 
   const trackVisitMut = useTrackVisit();
 
-  // Keep-alive ping para mantener el servidor activo en planes gratuitos (Render / Railway / Fly)
+  // Keep-alive ping activo cada 30s para mantener el servidor despierto 24/7 en Render y evitar reinicios
   useEffect(() => {
-    const pingServer = () => {
-      fetch("/api/ping").catch(() => {});
+    const pingServer = async () => {
+      try {
+        await fetch("/api/ping");
+      } catch (err) {
+        // Retry keep-alive
+      }
     };
     pingServer();
-    const interval = setInterval(pingServer, 4 * 60 * 1000); // cada 4 minutos
+    const interval = setInterval(pingServer, 30 * 1000); // Cada 30 segundos
     return () => clearInterval(interval);
+  }, []);
+
+  // Auto-backup local y sincronización con el servidor para precaver pérdidas por reinicios
+  useEffect(() => {
+    const syncLocalStorageBackup = async () => {
+      try {
+        const storedProducts = localStorage.getItem("fellas_catalog_products");
+        const storedMedia = localStorage.getItem("fellas_catalog_media");
+
+        if (storedProducts || storedMedia) {
+          const productsParsed = storedProducts ? JSON.parse(storedProducts) : null;
+          const mediaParsed = storedMedia ? JSON.parse(storedMedia) : null;
+
+          await fetch("/api/sync-backup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              products: productsParsed,
+              mediaLibrary: mediaParsed,
+            }),
+          });
+        }
+      } catch (e) {
+        console.warn("Error en auto-sync de seguridad:", e);
+      }
+    };
+    syncLocalStorageBackup();
   }, []);
 
   useEffect(() => {

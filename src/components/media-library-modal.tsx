@@ -87,7 +87,52 @@ export const MODAL_CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "Otros / General": <FolderOpen size={16} className="text-gray-400" />,
 };
 
-export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
+class ModalErrorBoundary extends React.Component<{ children: React.ReactNode; onClose: () => void }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ModalErrorBoundary caught error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-[9999999] bg-black/90 flex items-center justify-center p-6 text-white text-center">
+          <div className="max-w-md bg-[#161624] border border-red-500/50 p-6 rounded-2xl space-y-4 shadow-2xl">
+            <h3 className="text-lg font-black text-red-400 uppercase tracking-wider">Ocurrió un inconveniente al cargar la galería</h3>
+            <p className="text-xs text-gray-300">Se evitó un error de pantalla. Puedes continuar editando normalmente.</p>
+            <button
+              type="button"
+              onClick={() => {
+                this.setState({ hasError: false });
+                this.props.onClose();
+              }}
+              className="px-5 py-2.5 bg-[#ffd025] text-black font-black rounded-xl text-xs uppercase tracking-wider hover:bg-[#ffe066] cursor-pointer"
+            >
+              Volver al Panel
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return (
+    <ModalErrorBoundary onClose={props.onClose}>
+      <MediaLibraryModalContent {...props} />
+    </ModalErrorBoundary>
+  );
+};
+
+const MediaLibraryModalContent: React.FC<MediaLibraryModalProps> = ({
   isOpen,
   onClose,
   onSelectImage,
@@ -330,8 +375,15 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
   };
 
   // Group images by section safely
-  const { groupedImages, sectionCounts, allFilteredCount } = useMemo(() => {
-    const safeSections = MODAL_ORDERED_SECTIONS;
+  const { groupedImages, sectionCounts, allFilteredCount, activeSections } = useMemo(() => {
+    const sectionsSet = new Set<string>(MODAL_ORDERED_SECTIONS);
+    (images || []).forEach((img) => {
+      if (img?.category && img.category.trim()) {
+        sectionsSet.add(img.category.trim());
+      }
+    });
+    const safeSections = Array.from(sectionsSet);
+
     const counts: Record<string, number> = {};
     safeSections.forEach((s) => (counts[s] = 0));
 
@@ -370,6 +422,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
       groupedImages: grouped,
       sectionCounts: counts,
       allFilteredCount: filtered.length,
+      activeSections: safeSections,
     };
   }, [images, searchQuery, hideAssigned, assignedImages, currentImage]);
 
@@ -572,7 +625,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
               <span>Todas ({allFilteredCount})</span>
             </button>
 
-            {MODAL_ORDERED_SECTIONS.map((secName) => {
+            {activeSections.map((secName) => {
               const count = sectionCounts[secName] || 0;
               if (count === 0 && selectedSectionFilter !== secName) return null;
               const isSelected = selectedSectionFilter === secName;
@@ -651,7 +704,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
             </div>
           ) : (
             <div className="space-y-4">
-              {MODAL_ORDERED_SECTIONS.map((secName) => {
+              {activeSections.map((secName) => {
                 if (selectedSectionFilter !== "all" && selectedSectionFilter !== secName) {
                   return null;
                 }
@@ -789,7 +842,7 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                                   className="w-full bg-[#0c0c14] border border-white/10 rounded-lg px-1.5 py-0.5 text-[9px] font-semibold text-gray-300 focus:border-[#ffd025] focus:outline-none cursor-pointer"
                                   title="Mover foto a otra sección"
                                 >
-                                  {MODAL_ORDERED_SECTIONS.map((s) => (
+                                  {activeSections.map((s) => (
                                     <option key={s} value={s} className="bg-[#141422] text-white">
                                       {s}
                                     </option>
