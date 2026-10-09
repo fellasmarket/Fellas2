@@ -178,8 +178,11 @@ import {
   LayoutGrid,
   ChevronLeft,
   ArrowLeft,
+  ArrowRight,
   Star,
   LogIn,
+  Mail,
+  Lock,
   AlertTriangle,
   ExternalLink,
   Camera,
@@ -188,6 +191,7 @@ import {
   DownloadCloud,
   UploadCloud,
   Database,
+  Truck,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { StoreGallery, DEFAULT_GALLERY_IMAGES, GalleryImageItem } from "@/components/store-gallery";
@@ -610,6 +614,7 @@ export default function Storefront() {
   }, [view]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
@@ -717,6 +722,8 @@ export default function Storefront() {
   const [customer, setCustomer] = useState<{ id: number; email: string; name: string; phone: string } | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authStep, setAuthStep] = useState<"email" | "password" | "register">("email");
+  const [existingCustomerName, setExistingCustomerName] = useState("");
   const [showAccountPanel, setShowAccountPanel] = useState(false);
   const [savedCarts, setSavedCarts] = useState<Array<{ id: number; name: string; items: any[]; createdAt: string }>>([]);
   const [selectedLocation, setSelectedLocation] = useState<DeliveryLocation | null>(null);
@@ -863,6 +870,7 @@ export default function Storefront() {
   const [savedAisles, setSavedAisles] = useState(false);
   const [savedSubcats, setSavedSubcats] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
+  const [usernameInput, setUsernameInput] = useState("");
 
   const [formState, setFormState] = useState(DEFAULT_FORM);
   const [settingsDraft, setSettingsDraft] = useState<Settings>(settings);
@@ -1103,6 +1111,23 @@ export default function Storefront() {
     return products.filter((p) => !p.hidden);
   }, [products, settings.contingencyMode, settings.contingencyAislesConfig]);
 
+  const cartRecommendations = useMemo(() => {
+    const inCartIds = new Set(cart.map((c) => c.id));
+    const recs: Product[] = [];
+    for (const p of promoProducts) {
+      if (!inCartIds.has(p.id) && !recs.some((r) => r.id === p.id)) {
+        recs.push(p);
+      }
+    }
+    for (const p of baseProducts) {
+      if (!p.hidden && !inCartIds.has(p.id) && !recs.some((r) => r.id === p.id)) {
+        recs.push(p);
+      }
+      if (recs.length >= 8) break;
+    }
+    return recs.slice(0, 8);
+  }, [cart, promoProducts, baseProducts]);
+
   const allMenuSections = useMemo(() => {
     const list: Array<{ name: string; type: "category" | "aisle" }> = [];
     categories.forEach((c) => list.push({ name: c, type: "category" }));
@@ -1112,8 +1137,10 @@ export default function Storefront() {
       }
     });
 
-    // Always filter out empty categories or aisles to avoid rendering dead/empty menu links
+    // Filter out empty categories or aisles, and exclude "oportunidades" and "packs" from navigation menu
     return list.filter((item) => {
+      const lower = item.name.toLowerCase();
+      if (lower.includes("oportunidad") || lower.includes("pack")) return false;
       const count = baseProducts.filter((p) =>
         item.type === "category" ? p.category === item.name : p.aisle === item.name
       ).length;
@@ -1297,14 +1324,12 @@ export default function Storefront() {
 
     const targets: DiscoveryTarget[] = [];
 
-    availableAisles.forEach((a) => targets.push({ type: "aisle", name: a }));
-    availableCategories.forEach((c) => targets.push({ type: "category", name: c }));
-    if (opportunitiesCustomProducts.length > 0) {
-      targets.push({ type: "oportunidades", name: "Oportunidades & Ofertas" });
-    }
-    if (packsCustomProducts.length > 0) {
-      targets.push({ type: "packs", name: "Packs Especiales" });
-    }
+    availableAisles
+      .filter((a) => !/oportunidad|pack/i.test(a))
+      .forEach((a) => targets.push({ type: "aisle", name: a }));
+    availableCategories
+      .filter((c) => !/oportunidad|pack/i.test(c))
+      .forEach((c) => targets.push({ type: "category", name: c }));
     if (promoProducts.length > 0) {
       targets.push({ type: "recommended", name: "#NUESTROSRECOMENDADOS" });
     }
@@ -1490,6 +1515,66 @@ export default function Storefront() {
     } catch {}
   };
 
+  const handleCheckEmail = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanEmail = authFields.email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setAuthError("Por favor ingresa tu correo para continuar");
+      return;
+    }
+
+    // Acceso para administración y delivery (sin requerir correo ni validaciones adicionales)
+    const isAdminOrDelivery =
+      cleanEmail === "admin" ||
+      cleanEmail === "administrador" ||
+      cleanEmail === "delivery" ||
+      cleanEmail === "admin@fellas.cl" ||
+      cleanEmail === "admin@gmail.com" ||
+      cleanEmail === "delivery@fellas.cl" ||
+      cleanEmail === "delivery@gmail.com";
+
+    if (isAdminOrDelivery) {
+      setAuthMode("login");
+      setAuthStep("password");
+      setExistingCustomerName("");
+      setAuthError("");
+      return;
+    }
+
+    if (!cleanEmail.includes("@")) {
+      setAuthError("Ingresa un correo electrónico válido");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const res = await fetch("/api/customers/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || "Error al verificar correo");
+        setAuthLoading(false);
+        return;
+      }
+      if (data.exists) {
+        setAuthMode("login");
+        setAuthStep("password");
+        if (data.name) setExistingCustomerName(data.name);
+      } else {
+        setAuthMode("register");
+        setAuthStep("register");
+        setExistingCustomerName("");
+      }
+    } catch {
+      setAuthError("Error de conexión. Intenta nuevamente.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleCustomerAuth = async (e: FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -1498,45 +1583,76 @@ export default function Storefront() {
     const inputUser = authFields.email.trim().toLowerCase();
     const inputPass = authFields.password.trim();
 
-    // Check Admin login credentials (admin / fellhonpm)
-    if (authMode === "login" && (inputUser === "admin" || inputUser === "admin@fellas.cl" || inputUser === "admin@gmail.com") && inputPass === "fellhonpm") {
+    const isAdminUser =
+      inputUser === "admin" ||
+      inputUser === "administrador" ||
+      inputUser === "admin@fellas.cl" ||
+      inputUser === "admin@gmail.com";
+
+    const isDeliveryUser =
+      inputUser === "delivery" ||
+      inputUser === "delivery@fellas.cl" ||
+      inputUser === "delivery@gmail.com";
+
+    // 1. Acceso directo como Administrador (con usuario admin o clave admin)
+    if (
+      (isAdminUser && (inputPass === "fellhonpm" || inputPass === (process.env.ADMIN_PASSWORD || "fellhonpm"))) ||
+      inputPass === "fellhonpm"
+    ) {
       setAdminRole("full");
       setView("admin");
       setShowAuthModal(false);
+      setShowAuthBar(false);
       setAuthFields({ email: "", password: "", name: "", phone: "" });
-      showToast("Acceso concedido a Panel Administrador ✓");
+      setAuthStep("email");
+      setExistingCustomerName("");
+      showToast("Acceso concedido ✓");
       setAuthLoading(false);
       return;
     }
 
-    // Check Delivery login credentials (delivery / botifelldely)
-    if (authMode === "login" && (inputUser === "delivery" || inputUser === "delivery@fellas.cl" || inputUser === "delivery@gmail.com") && inputPass === "botifelldely") {
+    // 2. Acceso directo como Delivery (con usuario delivery o clave delivery)
+    if (
+      (isDeliveryUser && (inputPass === "botifelldely" || inputPass === (process.env.DELIVERY_PASSWORD || "botifelldely"))) ||
+      inputPass === "botifelldely"
+    ) {
       setAdminRole("delivery");
       setAdminTab("orders");
       setView("admin");
       setShowAuthModal(false);
+      setShowAuthBar(false);
       setAuthFields({ email: "", password: "", name: "", phone: "" });
-      showToast("Acceso concedido a Panel Delivery ✓");
+      setAuthStep("email");
+      setExistingCustomerName("");
+      showToast("Acceso Delivery concedido ✓");
       setAuthLoading(false);
       return;
     }
 
-    // Check if password alone matches admin or delivery credentials as fallback
-    if (authMode === "login" && (inputPass === "fellhonpm" || inputPass === "botifelldely")) {
-      try {
-        const res = await adminLoginMut.mutateAsync({ data: { password: inputPass } });
-        if (res.ok) {
-          const role = (res.role === "delivery" ? "delivery" : "full") as "full" | "delivery";
-          setAdminRole(role);
-          if (role === "delivery") setAdminTab("orders");
-          setView("admin");
-          setShowAuthModal(false);
-          setAuthFields({ email: "", password: "", name: "", phone: "" });
-          showToast(role === "delivery" ? "Acceso como Delivery ✓" : "Acceso como Administrador ✓");
-          setAuthLoading(false);
-          return;
-        }
-      } catch {}
+    // 3. Verificación con el endpoint de administración del backend
+    try {
+      const res = await adminLoginMut.mutateAsync({
+        data: {
+          username: inputUser || undefined,
+          password: inputPass,
+        },
+      });
+      if (res && res.ok) {
+        const role = (res.role === "delivery" || isDeliveryUser ? "delivery" : "full") as "full" | "delivery";
+        setAdminRole(role);
+        if (role === "delivery") setAdminTab("orders");
+        setView("admin");
+        setShowAuthModal(false);
+        setShowAuthBar(false);
+        setAuthFields({ email: "", password: "", name: "", phone: "" });
+        setAuthStep("email");
+        setExistingCustomerName("");
+        showToast(role === "delivery" ? "Acceso Delivery concedido ✓" : "Acceso concedido ✓");
+        setAuthLoading(false);
+        return;
+      }
+    } catch {
+      // No son credenciales de administración, continúa con cliente normal
     }
 
     try {
@@ -1546,13 +1662,16 @@ export default function Storefront() {
         : { email: authFields.email, password: authFields.password, name: authFields.name, phone: authFields.phone };
       const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await r.json();
-      if (!r.ok) { setAuthError(data.message ?? "Error al procesar."); return; }
+      if (!r.ok) { setAuthError(data.message ?? data.error ?? "Contraseña incorrecta."); return; }
       try { localStorage.setItem("customer_token", data.token); } catch {}
       setCustomerToken(data.token);
       setCustomer(data.customer);
       setShowAuthModal(false);
+      setShowAuthBar(false);
       setAuthFields({ email: "", password: "", name: "", phone: "" });
-      showToast(`¡Bienvenido, ${data.customer.name}!`);
+      setAuthStep("email");
+      setExistingCustomerName("");
+      showToast(authMode === "register" ? `¡Cuenta creada! Bienvenido, ${data.customer.name}` : `¡Bienvenido, ${data.customer.name}!`);
     } catch { setAuthError("Error de conexión. Intenta de nuevo."); }
     finally { setAuthLoading(false); }
   };
@@ -2110,7 +2229,10 @@ export default function Storefront() {
   const handleLogin = async () => {
     try {
       const res = await adminLoginMut.mutateAsync({
-        data: { password: passwordInput },
+        data: {
+          username: usernameInput.trim() || undefined,
+          password: passwordInput,
+        },
       });
       if (res.ok) {
         const role = (res.role === "delivery" ? "delivery" : "full") as "full" | "delivery";
@@ -2118,11 +2240,13 @@ export default function Storefront() {
         if (role === "delivery") setAdminTab("orders");
         setView("admin");
         setPasswordInput("");
+        setUsernameInput("");
+        showToast(role === "delivery" ? "Acceso al Panel Delivery ✓" : "Acceso a la Autoadministración ✓");
       } else {
-        showToast("Contraseña incorrecta");
+        showToast("Usuario o contraseña incorrectos");
       }
     } catch {
-      showToast("Contraseña incorrecta");
+      showToast("Usuario o contraseña incorrectos");
     }
   };
 
@@ -2267,7 +2391,7 @@ export default function Storefront() {
   if (!ageVerified) {
     return (
       <div className="min-h-screen bg-[#141414] flex items-center justify-center p-4">
-        <div className="bg-[#1a1a1a] border border-[#ffd025]/20 rounded-3xl p-8 md:p-12 max-w-sm w-full flex flex-col items-center gap-7 shadow-2xl shadow-black/70">
+        <div className="bg-[#1a1a1a] border border-white/10 rounded-3xl p-8 md:p-12 max-w-sm w-full flex flex-col items-center gap-7 shadow-2xl shadow-black/70">
           <div className="w-full flex justify-center min-h-[80px] items-center">
             {isLoading || !settings.logo ? (
               <div className="w-44 h-16 rounded-2xl bg-[#252525] animate-pulse" />
@@ -2313,14 +2437,20 @@ export default function Storefront() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#141414] flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-4 border-[#ffd025]/20 border-t-[#ffd025] animate-spin" />
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-4 border-[#ffd129]/20 border-t-[#ffd129] animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#141414] text-[#ffd025] font-sans selection:bg-[#ffd025] selection:text-[#141414]">
+    <div
+      className={`min-h-screen font-sans ${
+        view === "client"
+          ? "bg-white text-[#141414] selection:bg-[#ffd129] selection:text-[#141414]"
+          : "bg-[#0d0d16] text-white selection:bg-[#ffd129] selection:text-[#141414]"
+      }`}
+    >
       {view === "client" && (
         <div className="fixed bottom-4 right-4 z-50 flex flex-col items-center gap-2.5">
           <a
@@ -2345,7 +2475,7 @@ export default function Storefront() {
         </div>
       )}
       {toast.show && (
-        <div className="fixed top-24 right-4 z-50 bg-[#ffd025] text-[#141414] px-6 py-3 rounded-full font-bold shadow-lg shadow-[#ffd025]/20 flex items-center gap-3 animate-slide-in-right">
+        <div className="fixed top-24 right-4 z-[250] bg-[#ffd129] text-[#141414] px-6 py-3 rounded-full font-bold shadow-lg shadow-[#ffd129]/20 flex items-center gap-3 animate-slide-in-right">
           <CheckCircle size={20} /> {toast.message}
           {toast.actionLabel && toast.onAction && (
             <button
@@ -2477,21 +2607,17 @@ export default function Storefront() {
                 onClick={() => {
                   setMobileNavDrawerOpen(false);
                   if (customer) setShowAccountPanel(true);
-                  else { setShowAuthModal(true); setAuthMode("login"); }
+                  else {
+                    setShowAuthBar(true);
+                    setAuthStep("email");
+                    setAuthError("");
+                  }
                 }}
-                className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-bold text-gray-200 transition-colors"
+                className="w-full flex items-center justify-center p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-200 transition-colors"
+                title={customer ? customer.name : "Iniciar Sesión"}
+                aria-label="Iniciar Sesión"
               >
-                <User size={15} className="text-[#ffd025]" />
-                <span>{customer ? customer.name : "Iniciar Sesión / Registro"}</span>
-              </button>
-              <button
-                onClick={() => {
-                  setMobileNavDrawerOpen(false);
-                  setView("admin-login");
-                }}
-                className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-gray-400 hover:text-white transition-colors"
-              >
-                <SettingsIcon size={15} /> Panel de Administración
+                <User size={18} />
               </button>
             </div>
           </div>
@@ -2501,31 +2627,67 @@ export default function Storefront() {
       {view === "client" && (
         <header
           ref={headerRef}
-          className="fixed top-0 left-0 right-0 w-full z-50 bg-black text-white shadow-2xl select-none"
-          style={{ position: "fixed", top: 0, left: 0, right: 0, width: "100%", zIndex: 50 }}
+          className="fixed top-0 left-0 right-0 w-full z-50 bg-[#141414] text-white shadow-2xl select-none"
+          style={{ position: "fixed", top: 0, left: 0, right: 0, width: "100%", zIndex: 50, backgroundColor: "#141414" }}
         >
-          {/* BARRA SUPERIOR (1/6): Degradado naranja-coral ultra delgado con tipografía equilibrada */}
+          {/* BARRA SUPERIOR TICKETER: COLOR #ffd129 */}
           <div
             onClick={() => setShowComunasModal(true)}
-            className="w-full text-white py-1.5 px-2 sm:px-4 text-center cursor-pointer select-none transition-opacity hover:opacity-95 flex items-center justify-center min-h-[24px] sm:min-h-[28px]"
+            className="w-full text-[#141414] py-1.5 px-2 sm:px-4 text-center cursor-pointer select-none transition-opacity hover:opacity-95 flex items-center justify-center min-h-[24px] sm:min-h-[28px]"
             style={{
-              background: "linear-gradient(90deg, #f7a627 0%, #fa7a34 50%, #f44369 100%)",
+              backgroundColor: "#ffd129",
             }}
           >
-            <span className="font-bold uppercase tracking-wider text-[7.5px] min-[360px]:text-[8.5px] min-[410px]:text-[9.5px] sm:text-[11px] leading-tight text-white text-center break-words text-balance max-w-full">
-              {settings.topAnnouncementText?.trim() || "PIDE ANTES DE LAS 8:00 AM Y RECIBE EL MISMO DÍA (VER COMUNAS)"}
+            <span className="font-black uppercase tracking-wider text-[8px] min-[360px]:text-[9px] min-[410px]:text-[10px] sm:text-[11.5px] leading-tight text-[#141414] text-center break-words text-balance max-w-full">
+              {settings.topAnnouncementText?.trim() || headerAnnouncements[activeAnnouncementIdx] || "PIDE ANTES DE LAS 8:00 AM Y RECIBE EL MISMO DÍA (VER COMUNAS)"}
             </span>
           </div>
 
-          {/* BARRA PRINCIPAL (5/6): División continua con líneas separadoras/divisorias verticales */}
-          <div className="w-full bg-black border-b border-white/20">
-            <div className="w-full flex items-stretch h-12 sm:h-14 px-2 sm:px-6 md:px-8 lg:px-10">
+          {/* BARRA PRINCIPAL: COLOR NEGRO #141414 */}
+          <div className="w-full bg-[#141414] border-b border-white/15" style={{ backgroundColor: "#141414" }}>
+            <div className="w-full flex items-center justify-between h-13 sm:h-15 px-3 sm:px-6 md:px-8 lg:px-10">
               
-              {/* 1. SECCIÓN IZQUIERDA: LOGO + CATEGORÍAS (ÍCONO EN MÓVIL) + OPORTUNIDADES + PACKS */}
-              <div className="flex items-center gap-2 sm:gap-5 pr-2 sm:pr-6 shrink-0">
-                {/* LOGO LA NEGRA */}
+              {/* 1. ALINEADOS A LA IZQUIERDA: BOTÓN DE MENÚ + BOTÓN DE BÚSQUEDA */}
+              <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                {/* BOTÓN DE MENÚ (SOLO ÍCONO) */}
                 <button
-                  className="focus:outline-none flex items-center group mr-0.5 sm:mr-2"
+                  type="button"
+                  onClick={() => {
+                    setShowAuthBar(false);
+                    setIsCartOpen(false);
+                    setShowAisleMenu(true);
+                  }}
+                  className={`p-2 sm:p-2.5 rounded-xl transition-all cursor-pointer ${
+                    showAisleMenu ? "bg-white/15 text-[#ffd129]" : "text-white hover:text-[#ffd129] hover:bg-white/10"
+                  }`}
+                  title="Abrir menú de pasillos y categorías"
+                  aria-label="Abrir menú"
+                >
+                  <Menu size={22} className="shrink-0" />
+                </button>
+
+                {/* BOTÓN DE BÚSQUEDA (SOLO ÍCONO, SIN TEXTO, SIN BORDES) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAisleMenu(false);
+                    setShowAuthBar(false);
+                    setIsCartOpen(false);
+                    setIsSearchModalOpen(true);
+                  }}
+                  className="p-2 sm:p-2.5 rounded-xl text-white hover:text-[#ffd129] hover:bg-white/10 transition-all cursor-pointer"
+                  title="Buscar productos"
+                  aria-label="Buscar productos"
+                >
+                  <Search size={21} className="shrink-0" />
+                </button>
+              </div>
+
+              {/* 2. JUSTO AL CENTRO: LOGO DE LA TIENDA */}
+              <div className="flex-1 flex items-center justify-center px-2">
+                <button
+                  type="button"
+                  className="focus:outline-none flex items-center justify-center group cursor-pointer"
                   onClick={() => {
                     setSearchQuery("");
                     setActiveCategory("");
@@ -2540,466 +2702,77 @@ export default function Storefront() {
                     <img
                       src={settings.logo}
                       alt="LA NEGRA"
-                      className="h-6 sm:h-8 md:h-9 object-contain max-w-[80px] sm:max-w-[140px] md:max-w-[180px] brightness-110"
+                      className="h-7 sm:h-9 md:h-10 object-contain max-w-[110px] sm:max-w-[160px] md:max-w-[200px] brightness-110 transition-transform group-hover:scale-105"
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = "none";
                       }}
                     />
                   ) : null}
                   {!settings.logo && (
-                    <span className="font-serif font-black text-base sm:text-2xl md:text-[26px] tracking-tight text-white uppercase whitespace-nowrap">
+                    <span className="font-serif font-black text-lg sm:text-2xl md:text-[26px] tracking-tight text-white uppercase whitespace-nowrap transition-transform group-hover:scale-105">
                       LA NEGRA
                     </span>
                   )}
                 </button>
-
-                {/* CATEGORÍAS (Solo ícono en PC y móvil) */}
-                <div className="relative h-full flex items-center">
-                  <button
-                    onClick={() => {
-                      setShowAuthBar(false);
-                      setShowLocationBar(false);
-                      setIsCartOpen(false);
-                      setShowAisleMenu((prev) => !prev);
-                    }}
-                    className={`flex items-center justify-center p-1.5 sm:p-2 rounded transition-colors ${
-                      showAisleMenu || activeCategory || activeAisle
-                        ? "text-[#ffd025]"
-                        : "text-white hover:text-gray-300"
-                    }`}
-                    title="Categorías y Pasillos"
-                    aria-expanded={showAisleMenu}
-                  >
-                    <LayoutGrid size={19} className="shrink-0" />
-                  </button>
-                </div>
               </div>
 
-              {/* 2. SECCIÓN CENTRAL: DIVISIÓN DE BÚSQUEDA CON LÍNEAS SEPARADORAS A AMBOS LADOS */}
-              <div className="flex-1 flex items-center h-full px-2 sm:px-6 min-w-0 border-l border-r border-white/20">
-                <div className="w-full h-full flex items-center relative">
-                  <Search
-                    size={16}
-                    className="text-white shrink-0 mr-1.5 sm:mr-3 pointer-events-none opacity-90"
-                    strokeWidth={2.2}
-                  />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="¿QUÉ BUSCAS?"
-                    className="w-full h-full bg-transparent text-[11px] sm:text-sm font-bold uppercase tracking-wider text-white placeholder-gray-400 focus:outline-none truncate"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="text-gray-400 hover:text-white p-1 shrink-0"
-                      aria-label="Limpiar búsqueda"
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* 3. SECCIÓN DERECHA: BOTONES EN FORMATO SOLO ÍCONO CON LÍNEAS SEPARADORAS */}
-              <div className="flex items-stretch shrink-0">
-                {/* INICIA SESIÓN / MI CUENTA (Solo ícono) */}
+              {/* 3. ALINEADOS A LA DERECHA: BOTÓN DE INICIO DE SESIÓN + CARRITO DE COMPRAS */}
+              <div className="flex items-center gap-1.5 sm:gap-3 shrink-0 justify-end">
+                {/* BOTÓN DE INICIO DE SESIÓN (SOLO ÍCONO, SIN TEXTO) */}
                 <button
+                  type="button"
                   onClick={() => {
                     setShowAisleMenu(false);
-                    setShowLocationBar(false);
                     setIsCartOpen(false);
+                    if (!customer && !showAuthBar) {
+                      setAuthStep("email");
+                      setAuthError("");
+                    }
                     setShowAuthBar((prev) => !prev);
                   }}
-                  className={`flex items-center justify-center px-3 sm:px-4 h-full border-r border-white/20 transition-colors shrink-0 ${
-                    showAuthBar ? "text-[#ffd025]" : "text-white hover:text-gray-300"
+                  className={`p-2 sm:p-2.5 rounded-xl transition-all cursor-pointer ${
+                    showAuthBar ? "bg-white/15 text-[#ffd129]" : "text-white hover:text-[#ffd129] hover:bg-white/10"
                   }`}
-                  title={customer ? `Sesión activa: ${customer.name}` : "Inicia Sesión / Mi Cuenta"}
+                  title={customer ? `Sesión activa: ${customer.name}` : "Iniciar Sesión"}
                   aria-label="Cuenta de usuario"
                 >
-                  <User size={19} className="shrink-0" strokeWidth={1.8} />
+                  <User size={20} className="shrink-0" />
                 </button>
 
-                {/* ELECCIÓN DE UBICACIÓN / COMUNAS (Solo ícono - Solo visible en versión PC) */}
+                {/* BOTÓN CARRITO DE COMPRAS */}
                 <button
+                  type="button"
                   onClick={() => {
                     setShowAisleMenu(false);
                     setShowAuthBar(false);
-                    setIsCartOpen(false);
-                    setShowLocationBar((prev) => !prev);
+                    setIsCartOpen(true);
                   }}
-                  className={`hidden md:flex items-center justify-center px-3 sm:px-4 h-full text-white border-r border-white/20 transition-colors shrink-0 ${
-                    showLocationBar ? "text-[#ffd025]" : "hover:text-[#ffd025]"
+                  className={`flex items-center gap-1.5 p-2 sm:px-3.5 sm:py-2 rounded-xl transition-all cursor-pointer relative ${
+                    isCartOpen ? "bg-[#ffd129] text-[#141414]" : "bg-white/10 hover:bg-[#ffd129] hover:text-[#141414] text-white"
                   }`}
-                  title={selectedComuna ? `Comuna seleccionada: ${selectedComuna}` : "Seleccionar comuna de entrega"}
-                  aria-label="Seleccionar comuna de entrega"
-                >
-                  <MapPin
-                    size={19}
-                    className={showLocationBar || selectedComuna ? "text-[#ffd025] shrink-0" : "text-white shrink-0"}
-                    strokeWidth={1.8}
-                  />
-                </button>
-
-                {/* CARRITO */}
-                <button
-                  onClick={() => {
-                    setShowAisleMenu(false);
-                    setShowAuthBar(false);
-                    setShowLocationBar(false);
-                    setIsCartOpen((prev) => !prev);
-                  }}
-                  className={`flex items-center justify-center gap-1 px-2 sm:px-4 h-full transition-all shrink-0 ${
-                    isCartOpen ? "text-[#ffd025]" : "text-white hover:text-gray-300"
-                  }`}
-                  aria-label="Ver carrito"
+                  aria-label="Ver carrito de compras"
                   title="Ver carrito de compras"
                 >
-                  <ShoppingCart size={20} className="shrink-0" strokeWidth={1.8} />
-                  <span className={`w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full border text-[10px] sm:text-[11px] font-bold flex items-center justify-center shrink-0 ${
-                    isCartOpen ? "border-[#ffd025] text-[#ffd025]" : "border-white text-white"
+                  <ShoppingCart size={20} className="shrink-0" />
+                  <span className={`w-5 h-5 rounded-full text-[10.5px] font-black flex items-center justify-center shrink-0 ${
+                    isCartOpen ? "bg-[#141414] text-[#ffd129]" : "bg-[#ffd129] text-[#141414]"
                   }`}>
                     {cartItemCount}
                   </span>
+                  {cartTotal > 0 && (
+                    <span className="hidden sm:inline text-xs font-black ml-0.5">
+                      ${cartTotal.toLocaleString("es-CL")}
+                    </span>
+                  )}
                 </button>
               </div>
 
             </div>
           </div>
 
-          {/* 4. DESPLIEGUE HORIZONTAL DE PASILLOS Y CATEGORÍAS (TEXTO SUELTO ULTRA COMPACTO) */}
-          {showAisleMenu && (
-            <div className="w-full bg-[#0a0a0f] border-b border-white/10 shadow-md py-1 px-2.5 sm:px-4 animate-fade-in transition-all">
-              <div className="max-w-[1500px] mx-auto flex items-center gap-3.5 sm:gap-5 overflow-x-auto no-scrollbar scrollbar-none">
-                <button
-                  onClick={() => {
-                    setActiveCategory("");
-                    setActiveAisle("");
-                    setNavQuickFilter("");
-                    setShowDedicatedProductsPage(false);
-                    setDedicatedViewMode("catalog");
-                    setShowAisleMenu(false);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`text-[10.5px] sm:text-xs uppercase tracking-wider transition-colors whitespace-nowrap shrink-0 py-0.5 ${
-                    !activeCategory && !activeAisle && !navQuickFilter && (!showDedicatedProductsPage || dedicatedViewMode === "catalog")
-                      ? "text-[#ffd025] font-black"
-                      : "text-gray-400 hover:text-white font-semibold"
-                  }`}
-                >
-                  Todo el catálogo
-                </button>
-
-                {allMenuSections.map((item) => {
-                  const isActive =
-                    item.type === "category"
-                      ? activeCategory === item.name
-                      : activeAisle === item.name;
-
-                  return (
-                    <button
-                      key={item.name}
-                      onClick={() => {
-                        setNavQuickFilter("");
-                        if (item.type === "category") {
-                          setActiveAisle("");
-                          setActiveCategory(item.name);
-                        } else {
-                          setActiveCategory("");
-                          setActiveAisle(item.name);
-                        }
-                        setShowDedicatedProductsPage(true);
-                        setDedicatedViewMode("pasillo");
-                        setShowAisleMenu(false);
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                      }}
-                      className={`text-[10.5px] sm:text-xs uppercase tracking-wider transition-colors whitespace-nowrap shrink-0 py-0.5 ${
-                        isActive
-                          ? "text-[#ffd025] font-black"
-                          : "text-gray-400 hover:text-white font-semibold"
-                      }`}
-                    >
-                      {item.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 5. DESPLIEGUE HORIZONTAL DE INICIO DE SESIÓN Y CUENTA (CENTRADO EN MÓVIL Y ESCRITORIO) */}
-          {showAuthBar && (
-            <div className="w-full bg-[#0a0a0f] border-b border-white/10 shadow-md py-1 px-2 sm:px-4 animate-fade-in transition-all">
-              <div className="max-w-[1500px] mx-auto flex items-center justify-center gap-2 sm:gap-3 overflow-x-auto no-scrollbar scrollbar-none">
-                {!customer ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setAuthMode("login");
-                      handleCustomerAuth(e);
-                    }}
-                    className="flex items-center justify-center gap-1.5 sm:gap-3 w-full overflow-x-auto no-scrollbar scrollbar-none py-0.5"
-                  >
-                    <input
-                      type="text"
-                      required
-                      value={authFields.email}
-                      onChange={(e) => {
-                        setAuthFields((f) => ({ ...f, email: e.target.value }));
-                        if (authError) setAuthError("");
-                      }}
-                      placeholder="Usuario / correo"
-                      className="bg-white/10 border border-white/20 text-white rounded px-2 sm:px-2.5 py-0.5 text-[10.5px] sm:text-xs placeholder-gray-400 focus:outline-none focus:border-[#ffd025] w-24 xs:w-28 sm:w-44"
-                    />
-
-                    <input
-                      type="password"
-                      required
-                      value={authFields.password}
-                      onChange={(e) => {
-                        setAuthFields((f) => ({ ...f, password: e.target.value }));
-                        if (authError) setAuthError("");
-                      }}
-                      placeholder="Clave"
-                      className="bg-white/10 border border-white/20 text-white rounded px-2 sm:px-2.5 py-0.5 text-[10.5px] sm:text-xs placeholder-gray-400 focus:outline-none focus:border-[#ffd025] w-20 xs:w-24 sm:w-32"
-                    />
-
-                    <button
-                      type="submit"
-                      disabled={authLoading}
-                      className="text-[10.5px] sm:text-xs font-black uppercase text-[#ffd025] hover:brightness-125 px-1.5 sm:px-2 py-0.5 whitespace-nowrap shrink-0 transition-colors disabled:opacity-50"
-                    >
-                      {authLoading ? "..." : "Entrar"}
-                    </button>
-
-                    <span className="text-gray-600 text-[10px] select-none">|</span>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAuthModal(true);
-                        setAuthMode("register");
-                        setShowAuthBar(false);
-                      }}
-                      className="text-gray-400 hover:text-[#ffd025] p-1 shrink-0 transition-colors"
-                      title="Registrarse / Crear cuenta"
-                      aria-label="Registrarse"
-                    >
-                      <UserPlus size={15} />
-                    </button>
-
-                    {authError && (
-                      <span className="text-rose-400 text-[10px] font-bold whitespace-nowrap pl-1">
-                        {authError}
-                      </span>
-                    )}
-                  </form>
-                ) : (
-                  <div className="flex items-center justify-center gap-2.5 sm:gap-3 w-full overflow-x-auto no-scrollbar scrollbar-none py-0.5">
-                    <span className="text-[10.5px] sm:text-xs uppercase font-black text-[#ffd025] whitespace-nowrap">
-                      Hola, {customer.name}
-                    </span>
-
-                    <span className="text-gray-500 text-[10px] select-none">|</span>
-
-                    <button
-                      onClick={() => {
-                        setShowAccountPanel(true);
-                        setShowAuthBar(false);
-                      }}
-                      className="text-[10.5px] sm:text-xs font-semibold uppercase text-gray-300 hover:text-white whitespace-nowrap"
-                    >
-                      Carritos ({savedCarts.length})
-                    </button>
-
-                    <span className="text-gray-500 text-[10px] select-none">|</span>
-
-                    <button
-                      onClick={() => {
-                        handleCustomerLogout();
-                        setShowAuthBar(false);
-                      }}
-                      className="text-[10.5px] sm:text-xs font-bold uppercase text-red-400 hover:text-red-300 whitespace-nowrap"
-                    >
-                      Cerrar sesión
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 5.1 DESPLIEGUE HORIZONTAL DE UBICACIÓN Y COMUNAS (SOLO EN PC, TEXTO SUELTO ULTRA COMPACTO Y CENTRADO) */}
-          {showLocationBar && (
-            <div className="hidden md:block w-full bg-[#0a0a0f] border-b border-white/10 shadow-md py-1 px-2.5 sm:px-4 animate-fade-in transition-all">
-              <div className="max-w-[1500px] mx-auto flex items-center justify-center gap-3.5 sm:gap-5 overflow-x-auto no-scrollbar scrollbar-none">
-                {[
-                  "Santiago Centro",
-                  "Providencia",
-                  "Las Condes",
-                  "Ñuñoa",
-                  "Vitacura",
-                  "La Florida",
-                  "Maipú",
-                  "San Miguel",
-                  "Macul",
-                  "Peñalolén",
-                  "La Reina",
-                  "Huechuraba",
-                ].map((comuna) => {
-                  const isSelected = selectedComuna === comuna;
-                  return (
-                    <button
-                      key={comuna}
-                      onClick={() => {
-                        setSelectedComuna(comuna);
-                        setCheckoutForm((prev) => ({
-                          ...prev,
-                          address: prev.address ? `${prev.address}, ${comuna}` : comuna,
-                        }));
-                        setShowLocationBar(false);
-                        setToast({
-                          show: true,
-                          message: `📍 Ubicación de entrega: ${comuna}`,
-                          actionLabel: "",
-                          onAction: null,
-                        });
-                      }}
-                      className={`text-[10.5px] sm:text-xs uppercase tracking-wider transition-colors whitespace-nowrap shrink-0 py-0.5 ${
-                        isSelected
-                          ? "text-[#ffd025] font-black"
-                          : "text-gray-400 hover:text-white font-semibold"
-                      }`}
-                    >
-                      {comuna}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* 6. DESPLIEGUE VERTICAL PLEGABLE DEL CARRITO JUSTO ABAJO DEL ENCABEZADO */}
-          {isCartOpen && (
-            <div className="w-full bg-[#0c0c12] border-b border-[#ffd025]/30 shadow-2xl animate-fade-in transition-all">
-              <div className="max-w-[1500px] mx-auto px-3 sm:px-6 py-3.5">
-                <div className="flex items-center justify-between pb-2.5 border-b border-white/10 mb-3">
-                  <div className="flex items-center gap-2">
-                    <ShoppingCart size={16} className="text-[#ffd025]" />
-                    <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
-                      Tu Carrito ({cartItemCount} {cartItemCount === 1 ? "producto" : "productos"})
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setIsCartOpen(false)}
-                    className="text-gray-400 hover:text-white p-1 transition-colors"
-                    aria-label="Cerrar carrito"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-
-                {cart.length === 0 ? (
-                  <div className="py-6 text-center text-gray-400">
-                    <p className="text-xs font-bold uppercase tracking-wider text-gray-300">Tu carrito está vacío</p>
-                    <p className="text-[11px] text-gray-500 mt-1">Explora los pasillos y añade tus productos</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Lista vertical de productos en el carrito */}
-                    <div className="max-h-64 sm:max-h-80 overflow-y-auto pr-1 space-y-2 no-scrollbar">
-                      {cart.map((item) => (
-                        <div
-                          key={item.cartItemId}
-                          className="flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-xl p-2.5 transition-colors hover:bg-white/[0.08]"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            {item.image ? (
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="w-11 h-11 rounded-lg object-cover bg-black/40 shrink-0"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                                }}
-                              />
-                            ) : (
-                              <div className="w-11 h-11 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                                <Package size={16} className="text-gray-400" />
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <h4 className="font-bold text-white text-xs truncate leading-tight">
-                                {item.name}
-                              </h4>
-                              {item.selectedOption && (
-                                <p className="text-[10px] text-gray-400 truncate mt-0.5">
-                                  {item.selectedOption}
-                                </p>
-                              )}
-                              <p className="text-[#ffd025] font-black text-xs mt-0.5">
-                                ${(Number(item.price || 0) * item.quantity).toLocaleString("es-CL")}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 bg-black/60 rounded-lg p-1 border border-white/10 shrink-0">
-                            <button
-                              onClick={() => updateQuantity(item.cartItemId, -1)}
-                              className="w-6 h-6 flex items-center justify-center rounded text-[#ffd025] hover:bg-[#ffd025]/20 font-bold text-xs transition-colors"
-                            >
-                              -
-                            </button>
-                            <span className="font-bold text-xs text-white w-5 text-center">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => updateQuantity(item.cartItemId, 1)}
-                              className="w-6 h-6 flex items-center justify-center rounded text-[#ffd025] hover:bg-[#ffd025]/20 font-bold text-xs transition-colors"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Resumen y Botón de Enviar Pedido */}
-                    <div className="pt-2.5 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
-                      <div className="flex items-baseline gap-2 w-full sm:w-auto justify-between sm:justify-start">
-                        <span className="text-[11px] font-bold uppercase text-gray-400">Total:</span>
-                        <span className="text-base sm:text-lg font-black text-[#ffd025]">
-                          ${cartTotal.toLocaleString("es-CL")}
-                        </span>
-                      </div>
-
-                      {!isStoreOpen && (
-                        <p className="text-[10px] text-amber-400 font-bold text-center">
-                          🕐 Pedidos habilitados desde las {settings.openTime ?? "11:00"}
-                        </p>
-                      )}
-
-                      <button
-                        onClick={() => {
-                          setIsCartOpen(false);
-                          openCheckout();
-                        }}
-                        disabled={!isStoreOpen}
-                        className="w-full sm:w-auto px-6 py-2.5 bg-[#ffd025] text-black rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#e5b81a] transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <Phone size={14} /> Enviar Pedido
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* 3ra DIVISIÓN DEL ENCABEZADO: Aviso de Horario de Atención (ESTRICTAMENTE 1 LÍNEA) */}
           {!isStoreOpen && (
-            <div className="w-full bg-[#1a0f00] border-t border-b border-amber-600/30 py-1 sm:py-1.5 px-2 sm:px-4 shadow-md overflow-hidden select-none">
+            <div className="w-full bg-[#141414] border-t border-b border-amber-600/30 py-1 sm:py-1.5 px-2 sm:px-4 shadow-md overflow-hidden select-none">
               <div className="w-full max-w-[1500px] mx-auto flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap overflow-hidden">
                 <span className="text-amber-400 text-[10px] sm:text-xs leading-none shrink-0 animate-pulse">🕐</span>
                 <p className="text-[7.5px] min-[330px]:text-[8.5px] min-[380px]:text-[9.5px] min-[420px]:text-[10px] sm:text-[11.5px] md:text-xs text-amber-300 font-bold leading-tight m-0 text-center whitespace-nowrap truncate">
@@ -3012,6 +2785,908 @@ export default function Storefront() {
             </div>
           )}
         </header>
+      )}
+
+      {/* 1. HALF POPUP DEL MENÚ (PROVENIENTE DE LA IZQUIERDA AL CENTRO, USA EXACTAMENTE EL 50% / 2/4 DE LA PANTALLA) */}
+      {view === "client" && showAisleMenu && (
+        <>
+          <div
+            onClick={() => setShowAisleMenu(false)}
+            className="fixed inset-0 bg-black/60 z-[110] backdrop-blur-xs animate-fade-in"
+          />
+          <div
+            className="fixed inset-y-0 left-0 w-1/2 max-w-[50vw] z-[120] bg-[#141414] text-white shadow-2xl flex flex-col border-0 animate-slide-right overflow-hidden"
+          >
+            {/* Encabezado del menú */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-[#141414] shrink-0">
+              <div className="flex items-center gap-1.5 min-w-0 text-white">
+                <Menu size={16} className="shrink-0 text-[#ffd129]" />
+                <span className="text-xs font-black uppercase tracking-wider text-white truncate">
+                  Pasillos
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Botón de inicio de sesión: SOLO ÍCONO */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAisleMenu(false);
+                    if (!customer) {
+                      setAuthStep("email");
+                      setAuthError("");
+                    }
+                    setShowAuthBar(true);
+                  }}
+                  className="p-1.5 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  title={customer ? `Sesión: ${customer.name}` : "Iniciar Sesión"}
+                  aria-label="Iniciar Sesión"
+                >
+                  <User size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAisleMenu(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  aria-label="Cerrar menú"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido desplazable del menú con tipografía ajustada para 1 sola línea */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-admin-scrollbar">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveCategory("");
+                  setActiveAisle("");
+                  setNavQuickFilter("");
+                  setShowDedicatedProductsPage(false);
+                  setDedicatedViewMode("catalog");
+                  setShowAisleMenu(false);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-[11px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                  !activeCategory && !activeAisle && !navQuickFilter && (!showDedicatedProductsPage || dedicatedViewMode === "catalog")
+                    ? "bg-white/20 text-white shadow-sm"
+                    : "text-gray-300 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden pr-1">
+                  <LayoutGrid size={13} className="shrink-0 text-[#ffd129]" />
+                  <span className="truncate whitespace-nowrap">Catálogo</span>
+                </div>
+                <ChevronRight size={13} className="text-gray-400 shrink-0 ml-1" />
+              </button>
+
+              <div className="pt-1.5 pb-0.5 px-2 flex items-center gap-1.5">
+                <Tag size={11} className="text-gray-500 shrink-0" />
+                <span className="text-[9px] font-black text-gray-500 uppercase tracking-wider block truncate">
+                  Pasillos
+                </span>
+              </div>
+
+              {allMenuSections.map((item) => {
+                const isActive =
+                  item.type === "category"
+                    ? activeCategory === item.name
+                    : activeAisle === item.name;
+
+                const count = baseProducts.filter((p) =>
+                  item.type === "category" ? p.category === item.name : p.aisle === item.name
+                ).length;
+
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => {
+                      setNavQuickFilter("");
+                      if (item.type === "category") {
+                        setActiveAisle("");
+                        setActiveCategory(item.name);
+                      } else {
+                        setActiveCategory("");
+                        setActiveAisle(item.name);
+                      }
+                      setShowDedicatedProductsPage(true);
+                      setDedicatedViewMode("pasillo");
+                      setShowAisleMenu(false);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-white/20 text-white font-black shadow-sm"
+                        : "text-gray-300 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden pr-1">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-[#ffd129]" : "bg-neutral-600"}`} />
+                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-tight truncate whitespace-nowrap leading-none block">
+                        {item.name}
+                      </span>
+                    </div>
+                    <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ${
+                      isActive ? "bg-black/30 text-white" : "bg-white/10 text-gray-400"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+
+              
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 2. POPUP DE INICIO DE SESIÓN (TODO EL ANCHO, 2/5 DEL ALTO, DESDE LA PARTE INFERIOR, SIN BORDES AMARILLOS) */}
+      {view === "client" && showAuthBar && (
+        <>
+          <div
+            onClick={() => setShowAuthBar(false)}
+            className="fixed inset-0 bg-black/60 z-[110] transition-opacity animate-fade-in"
+          />
+          <div
+            className="fixed bottom-0 left-0 right-0 w-full h-[40vh] max-h-[40vh] z-[120] bg-[#141414] text-white border-t border-white/10 rounded-t-3xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
+          >
+            {/* Tirador superior */}
+            <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mt-2.5 mb-1 shrink-0" />
+
+            {/* Encabezado */}
+            <div className="flex items-center justify-between px-5 sm:px-8 py-2.5 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-2">
+                <User size={18} className="text-[#ffd129]" />
+                <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
+                  {customer ? customer.name : "Iniciar Sesión"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAuthBar(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-white transition-colors cursor-pointer"
+                aria-label="Cerrar ventana de inicio de sesión"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Contenido ajustado a 2/5 de altura */}
+            <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-3 flex flex-col justify-center max-w-xl mx-auto w-full custom-admin-scrollbar">
+              {!customer ? (
+                <>
+                  {/* ETAPA 1: SOLICITAR CORREO */}
+                  {authStep === "email" && (
+                    <form
+                      onSubmit={handleCheckEmail}
+                      className="space-y-3 w-full animate-fade-in"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-gray-200 tracking-wide">
+                            <Mail size={13} className="text-[#ffd129]" />
+                            <span>Ingresa tu correo para continuar</span>
+                          </label>
+                          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">1 / 2</span>
+                        </div>
+                        <div className="relative flex items-center">
+                          <Mail size={15} className="absolute left-3.5 text-gray-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            required
+                            autoFocus
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            autoComplete="username"
+                            value={authFields.email}
+                            onChange={(e) => {
+                              setAuthFields((f) => ({ ...f, email: e.target.value }));
+                              if (authError) setAuthError("");
+                            }}
+                            placeholder="correo@ejemplo.com"
+                            className="w-full bg-neutral-900 border border-white/15 text-white rounded-xl pl-10 pr-3.5 py-2.5 text-xs sm:text-sm placeholder-gray-500 focus:outline-none focus:border-white/50 transition-colors"
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          Si no tienes cuenta, te registraremos automáticamente
+                        </p>
+                      </div>
+
+                      {authError && (
+                        <p className="text-rose-400 text-xs font-bold text-left animate-fade-in">
+                          {authError}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-end pt-1">
+                        <button
+                          type="submit"
+                          disabled={authLoading || !authFields.email.trim()}
+                          className="px-5 py-2.5 bg-white text-[#141414] font-black uppercase text-xs tracking-wider rounded-xl hover:bg-neutral-200 transition-all disabled:opacity-50 shadow-md cursor-pointer flex items-center justify-center gap-2"
+                          title="Continuar"
+                          aria-label="Continuar"
+                        >
+                          {authLoading ? (
+                            <Loader2 size={16} className="animate-spin text-[#141414]" />
+                          ) : (
+                            <ArrowRight size={18} />
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* ETAPA 2 (USUARIO EXISTENTE): SOLICITAR CONTRASEÑA */}
+                  {authStep === "password" && (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        setAuthMode("login");
+                        handleCustomerAuth(e);
+                      }}
+                      className="space-y-3 w-full animate-fade-in"
+                    >
+                      <div className="flex items-center justify-between bg-white/5 px-3 py-1.5 rounded-xl border border-white/10 text-xs">
+                        <div className="min-w-0 flex-1 truncate pr-2 flex items-center gap-1.5">
+                          <User size={13} className="text-[#ffd129] shrink-0" />
+                          <span className="text-white font-semibold truncate block text-xs">
+                            {authFields.email}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthStep("email");
+                            setAuthError("");
+                          }}
+                          className="p-1 text-gray-400 hover:text-white transition-colors cursor-pointer shrink-0"
+                          title="Cambiar correo"
+                          aria-label="Cambiar correo"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-gray-200 tracking-wide">
+                            <Lock size={13} className="text-[#ffd129]" />
+                            <span>Ingresa tu contraseña</span>
+                          </label>
+                          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">2 / 2</span>
+                        </div>
+                        <div className="relative flex items-center">
+                          <Lock size={15} className="absolute left-3.5 text-gray-400 pointer-events-none" />
+                          <input
+                            type="password"
+                            required
+                            autoFocus
+                            value={authFields.password}
+                            onChange={(e) => {
+                              setAuthFields((f) => ({ ...f, password: e.target.value }));
+                              if (authError) setAuthError("");
+                            }}
+                            placeholder="••••••••"
+                            className="w-full bg-neutral-900 border border-white/15 text-white rounded-xl pl-10 pr-3.5 py-2.5 text-xs sm:text-sm placeholder-gray-500 focus:outline-none focus:border-white/50 transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      {authError && (
+                        <p className="text-rose-400 text-xs font-bold text-left animate-fade-in">
+                          {authError}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthStep("email");
+                            setAuthError("");
+                          }}
+                          className="p-2.5 text-xs text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center rounded-xl hover:bg-white/5"
+                          title="Volver"
+                          aria-label="Volver"
+                        >
+                          <ArrowLeft size={18} />
+                        </button>
+
+                        <button
+                          type="submit"
+                          disabled={authLoading || !authFields.password.trim()}
+                          className="px-6 py-2.5 bg-white text-[#141414] font-black uppercase text-xs tracking-wider rounded-xl hover:bg-neutral-200 transition-all disabled:opacity-50 shadow-md cursor-pointer flex items-center justify-center gap-2"
+                          title="Entrar"
+                          aria-label="Entrar"
+                        >
+                          {authLoading ? (
+                            <Loader2 size={16} className="animate-spin text-[#141414]" />
+                          ) : (
+                            <LogIn size={18} />
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* ETAPA 2 (CORREO NO REGISTRADO): REGISTRO AUTOMÁTICO */}
+                  {authStep === "register" && (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        setAuthMode("register");
+                        handleCustomerAuth(e);
+                      }}
+                      className="space-y-2.5 w-full animate-fade-in"
+                    >
+                      <div className="flex items-center justify-between bg-white/5 px-3 py-1.5 rounded-xl border border-white/10 text-xs">
+                        <div className="min-w-0 flex-1 truncate pr-2 flex items-center gap-1.5">
+                          <UserPlus size={13} className="text-[#ffd129] shrink-0" />
+                          <span className="text-white font-semibold truncate block text-xs">
+                            Nuevo usuario: {authFields.email}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthStep("email");
+                            setAuthError("");
+                          }}
+                          className="p-1 text-gray-400 hover:text-white transition-colors cursor-pointer shrink-0"
+                          title="Cambiar correo"
+                          aria-label="Cambiar correo"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-gray-300 font-medium">
+                        Completa tus datos para crear tu cuenta
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="relative flex items-center">
+                          <User size={14} className="absolute left-3 text-gray-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            required
+                            autoFocus
+                            value={authFields.name}
+                            onChange={(e) => {
+                              setAuthFields((f) => ({ ...f, name: e.target.value }));
+                              if (authError) setAuthError("");
+                            }}
+                            placeholder="Nombre completo"
+                            className="w-full bg-neutral-900 border border-white/15 text-white rounded-xl pl-9 pr-3 py-2 text-xs placeholder-gray-500 focus:outline-none focus:border-white/50"
+                          />
+                        </div>
+
+                        <div className="relative flex items-center">
+                          <Lock size={14} className="absolute left-3 text-gray-400 pointer-events-none" />
+                          <input
+                            type="password"
+                            required
+                            minLength={6}
+                            value={authFields.password}
+                            onChange={(e) => {
+                              setAuthFields((f) => ({ ...f, password: e.target.value }));
+                              if (authError) setAuthError("");
+                            }}
+                            placeholder="Crea una clave (mín 6)"
+                            className="w-full bg-neutral-900 border border-white/15 text-white rounded-xl pl-9 pr-3 py-2 text-xs placeholder-gray-500 focus:outline-none focus:border-white/50"
+                          />
+                        </div>
+                      </div>
+
+                      {authError && (
+                        <p className="text-rose-400 text-xs font-bold text-left animate-fade-in">
+                          {authError}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between gap-3 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthStep("email");
+                            setAuthError("");
+                          }}
+                          className="p-2.5 text-xs text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center rounded-xl hover:bg-white/5"
+                          title="Volver"
+                          aria-label="Volver"
+                        >
+                          <ArrowLeft size={18} />
+                        </button>
+
+                        <button
+                          type="submit"
+                          disabled={authLoading || !authFields.name.trim() || !authFields.password.trim()}
+                          className="px-6 py-2.5 bg-white text-[#141414] font-black uppercase text-xs tracking-wider rounded-xl hover:bg-neutral-200 transition-all disabled:opacity-50 shadow-md cursor-pointer flex items-center justify-center gap-2"
+                          title="Crear Cuenta"
+                          aria-label="Crear Cuenta"
+                        >
+                          {authLoading ? (
+                            <Loader2 size={16} className="animate-spin text-[#141414]" />
+                          ) : (
+                            <Check size={18} />
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-4 py-2 text-center sm:text-left">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-[#ffd129] shrink-0">
+                        <User size={18} />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-black text-white truncate max-w-[200px]">{customer.name}</p>
+                        <p className="text-[11px] text-gray-400 truncate max-w-[200px]">{customer.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAccountPanel(true);
+                          setShowAuthBar(false);
+                        }}
+                        className="p-2.5 sm:px-3.5 sm:py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                        title={`Carritos guardados (${savedCarts.length})`}
+                        aria-label="Carritos guardados"
+                      >
+                        <ShoppingBag size={16} />
+                        <span className="text-xs font-bold">{savedCarts.length}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCustomerLogout();
+                          setShowAuthBar(false);
+                        }}
+                        className="p-2.5 sm:px-3.5 sm:py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                        title="Cerrar Sesión"
+                        aria-label="Cerrar Sesión"
+                      >
+                        <LogOut size={16} />
+                        <span className="hidden sm:inline text-xs font-bold uppercase">Cerrar Sesión</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 3. POPUP DE BÚSQUEDA A PANTALLA COMPLETA (SIN BORDES AMARILLOS) */}
+      {view === "client" && isSearchModalOpen && (
+        <div className="fixed inset-0 z-[140] bg-white text-neutral-900 flex flex-col animate-fade-in">
+          {/* Barra superior de búsqueda fija */}
+          <div className="w-full bg-[#141414] text-white px-4 sm:px-8 py-3.5 sm:py-4 shadow-xl border-b border-white/10 shrink-0">
+            <div className="max-w-5xl mx-auto flex items-center gap-3">
+              <div className="flex-1 relative flex items-center">
+                <Search size={20} className="absolute left-3.5 text-white/70 pointer-events-none" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="¿Qué estás buscando? (ej. Corona, Mistral, Pisco, Snack...)"
+                  className="w-full bg-neutral-900 text-white placeholder-gray-400 pl-11 pr-10 py-3 rounded-2xl text-xs sm:text-sm font-bold focus:outline-none focus:ring-1 focus:ring-white/30 border border-white/10 uppercase"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 text-gray-400 hover:text-white p-1 cursor-pointer"
+                    title="Limpiar"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSearchModalOpen(false)}
+                className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <X size={18} />
+                <span className="hidden sm:inline">Cerrar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Cuerpo con resultados y sugerencias */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8 max-w-6xl w-full mx-auto">
+            {/* Chips de búsqueda rápida */}
+            <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <span className="text-[11px] font-black uppercase text-neutral-400 whitespace-nowrap">
+                Sugerencias:
+              </span>
+              {["Cerveza", "Pisco", "Vino", "Whisky", "Bebida", "Snack", "Hielo", "Pack"].map((term) => (
+                <button
+                  key={term}
+                  type="button"
+                  onClick={() => setSearchQuery(term)}
+                  className={`px-3 py-1 rounded-full text-xs font-bold uppercase transition cursor-pointer whitespace-nowrap ${
+                    searchQuery.toLowerCase() === term.toLowerCase()
+                      ? "bg-[#141414] text-white"
+                      : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                  }`}
+                >
+                  {term}
+                </button>
+              ))}
+            </div>
+
+            {searchQuery.trim().length > 0 ? (
+              <div>
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-neutral-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm sm:text-base font-black uppercase text-neutral-900">
+                      Resultados para "{searchQuery}"
+                    </span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-neutral-200 text-neutral-900 font-bold">
+                      {searchResults.length} {searchResults.length === 1 ? "producto" : "productos"}
+                    </span>
+                  </div>
+                </div>
+
+                {searchResults.length === 0 ? (
+                  <div className="py-16 text-center border-2 border-dashed border-neutral-200 rounded-3xl bg-neutral-50 px-4">
+                    <div className="w-14 h-14 rounded-2xl bg-neutral-100 flex items-center justify-center mx-auto mb-3 text-neutral-400">
+                      <Search size={26} />
+                    </div>
+                    <h3 className="text-base font-bold text-neutral-800">
+                      No encontramos productos que coincidan con "{searchQuery}"
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-1 max-w-xs mx-auto">
+                      Intenta con otro término o revisa la ortografía.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                    {searchResults.map((product) => (
+                      <div
+                        key={product.id}
+                        className="group bg-neutral-50 border border-neutral-200 rounded-2xl p-3 flex flex-col justify-between hover:shadow-md transition-all"
+                      >
+                        <div>
+                          <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-neutral-100 mb-2 border border-neutral-200/60">
+                            {product.image ? (
+                              <img
+                                src={product.image}
+                                alt={product.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-neutral-400">
+                                <Package size={24} />
+                              </div>
+                            )}
+                            {product.oferta && (
+                              <span className="absolute top-1 left-1 px-1.5 py-0.5 bg-red-600 text-white text-[8px] font-black uppercase rounded shadow">
+                                OFERTA
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[9px] font-bold uppercase text-neutral-500 block truncate">
+                            {product.subcategory || product.category || product.aisle}
+                          </span>
+                          <h4 className="text-xs font-bold text-neutral-900 line-clamp-2 mt-0.5 leading-snug">
+                            {product.name}
+                          </h4>
+                        </div>
+
+                        <div className="mt-2.5 pt-2 border-t border-neutral-200 flex items-center justify-between gap-1">
+                          <span className="text-xs sm:text-sm font-black text-neutral-900">
+                            ${Number(product.price || 0).toLocaleString("es-CL")}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddToCartClick(product)}
+                            disabled={!isStoreOpen}
+                            className="px-2.5 py-1.5 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-[10px] uppercase rounded-lg transition-all flex items-center gap-1 shadow-xs disabled:opacity-40 cursor-pointer"
+                            title="Añadir al carrito"
+                          >
+                            <Plus size={12} /> Añadir
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles size={16} className="text-amber-500" />
+                  <h3 className="text-sm font-black uppercase text-neutral-800 tracking-wider">
+                    Productos Destacados para Empezar
+                  </h3>
+                </div>
+                <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                  {promoProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className="group bg-neutral-50 border border-neutral-200 rounded-2xl p-3 flex flex-col justify-between hover:shadow-md transition-all"
+                    >
+                      <div>
+                        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-neutral-100 mb-2 border border-neutral-200/60">
+                          {product.image ? (
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-neutral-400">
+                              <Package size={24} />
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[9px] font-bold uppercase text-neutral-500 block truncate">
+                          {product.category || product.aisle}
+                        </span>
+                        <h4 className="text-xs font-bold text-neutral-900 line-clamp-2 mt-0.5 leading-snug">
+                          {product.name}
+                        </h4>
+                      </div>
+
+                      <div className="mt-2.5 pt-2 border-t border-neutral-200 flex items-center justify-between gap-1">
+                        <span className="text-xs sm:text-sm font-black text-neutral-900">
+                          ${Number(product.price || 0).toLocaleString("es-CL")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCartClick(product)}
+                          disabled={!isStoreOpen}
+                          className="px-2.5 py-1.5 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-[10px] uppercase rounded-lg transition-all flex items-center gap-1 shadow-xs disabled:opacity-40 cursor-pointer"
+                          title="Añadir al carrito"
+                        >
+                          <Plus size={12} /> Añadir
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 4. POPUP DE PANTALLA COMPLETA DEL CARRITO DE COMPRAS CON RECOMENDACIONES (SIN BORDES AMARILLOS) */}
+      {view === "client" && isCartOpen && (
+        <div className="fixed inset-0 z-[130] bg-white text-neutral-900 flex flex-col overflow-y-auto animate-fade-in">
+          {/* Header Superior Fijo del Carrito */}
+          <div className="sticky top-0 z-20 w-full bg-[#141414] text-white px-4 sm:px-8 py-3.5 sm:py-4 shadow-xl border-b border-white/10 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white">
+                <ShoppingCart size={19} />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-black uppercase tracking-wider text-white">
+                  Tu Carrito de Compras
+                </h2>
+                <p className="text-[11px] text-gray-400 font-semibold">
+                  {cartItemCount} {cartItemCount === 1 ? "producto" : "productos"} seleccionados
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(false)}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all flex items-center gap-1.5 text-xs font-bold uppercase cursor-pointer"
+              aria-label="Cerrar carrito"
+            >
+              <X size={18} />
+              <span className="hidden sm:inline">Cerrar</span>
+            </button>
+          </div>
+
+          {/* Contenedor desplazable */}
+          <div className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+            
+            {/* SECCIÓN 1: LISTA DE PRODUCTOS DEL CARRITO */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
+                <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-neutral-800">
+                  Artículos en el Carrito
+                </span>
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCart([])}
+                    className="text-[11px] text-red-600 hover:text-red-700 font-bold uppercase transition cursor-pointer"
+                  >
+                    Vaciar Carrito
+                  </button>
+                )}
+              </div>
+
+              {cart.length === 0 ? (
+                <div className="py-10 text-center border-2 border-dashed border-neutral-200 rounded-3xl bg-neutral-50 px-4">
+                  <div className="w-14 h-14 rounded-2xl bg-neutral-100 border border-neutral-200 flex items-center justify-center mx-auto mb-3 text-neutral-400">
+                    <ShoppingCart size={26} />
+                  </div>
+                  <h3 className="text-sm sm:text-base font-bold text-neutral-800">
+                    Tu carrito está vacío
+                  </h3>
+                  <p className="text-xs text-neutral-500 mt-1 max-w-xs mx-auto">
+                    Explora nuestras recomendaciones justo abajo y añade tus productos favoritos con un solo clic.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {cart.map((item) => (
+                    <div
+                      key={item.cartItemId}
+                      className="flex items-center justify-between gap-3 bg-neutral-50 border border-neutral-200 rounded-2xl p-3 sm:p-4 hover:border-neutral-300 transition-all shadow-xs"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover bg-neutral-100 shrink-0 border border-neutral-200"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-neutral-100 flex items-center justify-center shrink-0 border border-neutral-200">
+                            <Package size={20} className="text-neutral-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-neutral-900 text-xs sm:text-sm truncate">
+                            {item.name}
+                          </h4>
+                          {item.selectedOption && (
+                            <p className="text-[11px] text-neutral-500 truncate mt-0.5">
+                              {item.selectedOption}
+                            </p>
+                          )}
+                          <p className="text-[#141414] font-black text-xs sm:text-sm mt-0.5">
+                            ${(Number(item.price || 0) * item.quantity).toLocaleString("es-CL")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center bg-white border border-neutral-200 rounded-xl p-1 shadow-xs">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.cartItemId, -1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-neutral-100 font-black text-sm text-neutral-700 transition cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="font-black text-xs sm:text-sm text-neutral-900 w-7 text-center">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.cartItemId, 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-neutral-100 font-black text-sm text-neutral-700 transition cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.cartItemId, -item.quantity)}
+                          className="p-2 text-neutral-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                          title="Eliminar producto"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Resumen del Pedido */}
+                  <div className="bg-neutral-900 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg border border-neutral-800 mt-4">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase text-gray-400 block">
+                        Total a Pagar:
+                      </span>
+                      <span className="text-xl sm:text-2xl font-black text-[#ffd129]">
+                        ${cartTotal.toLocaleString("es-CL")}
+                      </span>
+                    </div>
+
+                    {!isStoreOpen && (
+                      <p className="text-[11px] text-amber-400 font-bold text-center sm:text-left">
+                        🕐 Pedidos habilitados desde las {settings.openTime ?? "11:00"}
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCartOpen(false);
+                        openCheckout();
+                      }}
+                      disabled={!isStoreOpen}
+                      className="w-full sm:w-auto px-7 py-3 bg-[#ffd129] text-[#141414] font-black text-xs uppercase tracking-wider rounded-xl hover:bg-[#e5b81a] transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Phone size={16} /> Finalizar Pedido por WhatsApp
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* SECCIÓN 2: JUSTO ABAJO DE LA LISTA DE LOS PRODUCTOS DEL CARRITO: LISTA DE RECOMENDACIÓN DE PRODUCTOS */}
+            <div className="pt-4 border-t-2 border-neutral-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-500 text-base">⭐</span>
+                    <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-neutral-900">
+                      Recomendados para ti
+                    </h3>
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    Complementa tu pedido con estos productos sugeridos
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+                {cartRecommendations.map((product) => (
+                  <div
+                    key={product.id}
+                    className="group bg-neutral-50 border border-neutral-200 rounded-2xl p-3 flex flex-col justify-between hover:shadow-md transition-all"
+                  >
+                    <div>
+                      <div className="aspect-square w-full rounded-xl overflow-hidden bg-neutral-100 mb-2 border border-neutral-200/60">
+                        <img
+                          src={product.image || "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=400&auto=format&fit=crop&q=80"}
+                          alt={product.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                      <span className="text-[9px] font-bold uppercase text-neutral-500 block truncate">
+                        {product.subcategory || product.category || product.aisle || "Destacado"}
+                      </span>
+                      <h4 className="text-xs font-bold text-neutral-900 line-clamp-2 mt-0.5 leading-snug">
+                        {product.name}
+                      </h4>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-neutral-200 flex items-center justify-between gap-1">
+                      <span className="text-xs font-black text-neutral-900">
+                        ${Number(product.price || 0).toLocaleString("es-CL")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddToCartClick(product)}
+                        disabled={!isStoreOpen}
+                        className="px-2.5 py-1.5 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-[10px] uppercase rounded-lg transition-all flex items-center gap-1 shadow-xs disabled:opacity-40 cursor-pointer"
+                        title="Añadir al carrito"
+                      >
+                        <Plus size={12} /> Añadir
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </div>
       )}
 
       {/* Espaciador dinámico que replica la altura exacta del encabezado anclado */}
@@ -3027,12 +3702,12 @@ export default function Storefront() {
         <div className="w-full">
         <main className="relative">
           {optionModalInfo && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
               <div
                 className="absolute inset-0 bg-black/80 backdrop-blur-sm"
                 onClick={() => setOptionModalInfo(null)}
               ></div>
-              <div className="relative bg-[#1a1a1a] border border-[#ffd025]/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in">
+              <div className="relative bg-[#1a1a1a] border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in">
                 <button
                   onClick={() => setOptionModalInfo(null)}
                   className="absolute top-4 right-4 text-gray-400 hover:text-white"
@@ -3055,7 +3730,7 @@ export default function Storefront() {
                         key={opt}
                         className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
                           optionModalInfo.selectedOption === opt
-                            ? "border-[#ffd025] bg-[#ffd025]/10"
+                            ? "border-white/30 bg-white/10"
                             : "border-gray-700 hover:border-gray-500"
                         }`}
                       >
@@ -3097,26 +3772,26 @@ export default function Storefront() {
             /* VISTA EXCLUSIVA DE RESULTADOS DE BÚSQUEDA (Sin Colecciones, Sin Recomendados, Sin Banners) */
             <section className="w-full px-3 sm:px-6 md:px-8 mt-4 sm:mt-6 mb-12 animate-fade-in">
               {/* Header de Búsqueda */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-6 border-b border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-6 border-b border-neutral-200">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Search size={18} className="text-[#ffd025]" />
-                    <h2 className="text-base sm:text-lg font-black uppercase text-white tracking-wider">
+                    <Search size={18} className="text-neutral-900" />
+                    <h2 className="text-base sm:text-lg font-black uppercase text-neutral-900 tracking-wider">
                       Resultados de Búsqueda
                     </h2>
-                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#ffd025]/20 text-[#ffd025] font-bold font-mono border border-[#ffd025]/30">
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-neutral-200 text-neutral-900 font-bold font-mono">
                       {searchResults.length} {searchResults.length === 1 ? "producto encontrado" : "productos encontrados"}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Mostrando resultados que coinciden con: <span className="text-white font-bold">"{searchQuery}"</span>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Mostrando resultados que coinciden con: <span className="text-neutral-900 font-bold">"{searchQuery}"</span>
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="self-start sm:self-auto text-gray-400 hover:text-white text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 border-b border-white/20 hover:border-[#ffd025] pb-0.5 cursor-pointer"
+                  className="self-start sm:self-auto text-neutral-500 hover:text-neutral-900 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 border-b border-neutral-300 hover:border-neutral-800 pb-0.5 cursor-pointer"
                 >
                   <X size={14} />
                   <span>Limpiar búsqueda</span>
@@ -3125,20 +3800,20 @@ export default function Storefront() {
 
               {/* Grilla Directa de Productos Encontrados */}
               {searchResults.length === 0 ? (
-                <div className="text-center py-16 px-4 border border-dashed border-white/10 rounded-3xl bg-white/[0.02]">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-3 text-gray-500">
+                <div className="text-center py-16 px-4 border border-dashed border-neutral-300 rounded-3xl bg-neutral-50">
+                  <div className="w-16 h-16 rounded-2xl bg-neutral-100 border border-neutral-200 flex items-center justify-center mx-auto mb-3 text-neutral-400">
                     <Search size={28} />
                   </div>
-                  <h3 className="text-base sm:text-lg font-bold text-white mb-1">
+                  <h3 className="text-base sm:text-lg font-bold text-neutral-900 mb-1">
                     No se encontraron productos para "{searchQuery}"
                   </h3>
-                  <p className="text-xs text-gray-400 max-w-sm mx-auto mb-5">
+                  <p className="text-xs text-neutral-500 max-w-sm mx-auto mb-5">
                     Intenta buscando con otra palabra o revisa que esté escrita correctamente.
                   </p>
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="px-6 py-2.5 rounded-xl bg-[#ffd025] text-black font-black uppercase text-xs tracking-wider hover:bg-[#ffe066] transition cursor-pointer shadow-lg shadow-[#ffd025]/20"
+                    className="px-6 py-2.5 rounded-xl bg-[#ffd129] text-[#141414] font-black uppercase text-xs tracking-wider hover:bg-[#e5bc24] transition cursor-pointer shadow-md"
                   >
                     Ver catálogo completo
                   </button>
@@ -3151,7 +3826,7 @@ export default function Storefront() {
                       className="group flex flex-col justify-between h-full w-full"
                     >
                       <div>
-                        <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                        <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
                           {product.image ? (
                             <img
                               src={product.image}
@@ -3165,9 +3840,9 @@ export default function Storefront() {
                               }}
                             />
                           ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
-                              <Package size={20} className="text-[#ffd025]/70" />
-                              <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
+                              <Package size={20} className="text-[#ffd129]" />
+                              <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
                             </div>
                           )}
 
@@ -3182,7 +3857,7 @@ export default function Storefront() {
 
                         <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
                           {(product.subcategory || product.category || product.aisle) ? (
-                            <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                            <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-neutral-500 truncate block w-full">
                               {product.subcategory || product.category || product.aisle}
                             </span>
                           ) : (
@@ -3194,21 +3869,21 @@ export default function Storefront() {
 
                         <h4
                           title={product.name}
-                          className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                          className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
                         >
                           {product.name}
                         </h4>
                       </div>
 
-                      <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
-                        <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                      <div className="mt-2 pt-1.5 border-t border-neutral-200 flex items-center justify-between gap-1">
+                        <span className="text-[11px] sm:text-xs md:text-sm font-black text-neutral-900 truncate">
                           ${Number(product.price || 0).toLocaleString("es-CL")}
                         </span>
 
                         <button
                           onClick={() => handleAddToCartClick(product)}
                           disabled={!isStoreOpen}
-                          className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                          className="h-6 px-1.5 sm:px-2.5 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                           title="Añadir al carrito"
                           aria-label="Añadir al carrito"
                         >
@@ -3234,17 +3909,17 @@ export default function Storefront() {
                       setActiveCategory("");
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-white transition-colors py-1"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 hover:text-neutral-900 transition-colors py-1"
                   >
                     <ArrowLeft size={14} /> Volver a Portada
                   </button>
-                  <span className="text-[10px] font-mono text-[#ffd025] uppercase tracking-wider">
+                  <span className="text-[10px] font-mono text-neutral-600 uppercase tracking-wider">
                     {dedicatedViewMode === "oportunidades" ? "Pestaña Exclusiva Oportunidades" : dedicatedViewMode === "packs" ? "Pestaña Exclusiva Packs" : "Pestaña de Pasillos"}
                   </span>
                 </div>
 
                 {/* Banner exclusivo de sección (Solo imagen pura sin textos ni gradientes encima) */}
-                <div className="relative w-full h-24 sm:h-40 md:h-60 lg:h-72 xl:h-80 overflow-hidden rounded-none border border-white/10 mb-4 bg-black select-none shadow-xl">
+                <div className="relative w-full h-24 sm:h-40 md:h-60 lg:h-72 xl:h-80 overflow-hidden rounded-none border border-neutral-200 mb-4 bg-neutral-100 select-none shadow-sm">
                   <img
                     src={
                       dedicatedViewMode === "oportunidades"
@@ -3336,22 +4011,22 @@ export default function Storefront() {
                   return (
                     <div className="space-y-6 mb-12">
                       {/* BARRA DE BÚSQUEDA, SUBCATEGORÍAS Y ORDENAMIENTO (OPTIMIZADA PARA MÓVIL Y PC) */}
-                      <div className="w-full border-y border-white/15 py-2.5 my-3 flex items-center justify-between gap-2 sm:gap-4 flex-nowrap">
+                      <div className="w-full border-y border-neutral-200 py-2.5 my-3 flex items-center justify-between gap-2 sm:gap-4 flex-nowrap">
                         {/* 1. Buscador: Siempre visible, toma todo el ancho disponible en celular */}
                         <div className="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2">
-                          <Search size={16} className="text-[#ffd025] shrink-0 opacity-90" />
+                          <Search size={16} className="text-[#ffd129] shrink-0 opacity-90" />
                           <input
                             type="text"
                             value={dedicatedSearchQuery}
                             onChange={(e) => setDedicatedSearchQuery(e.target.value)}
                             placeholder="BUSCAR..."
-                            className="w-full bg-transparent text-white text-xs sm:text-sm font-bold uppercase placeholder-gray-500 focus:outline-none tracking-wider truncate"
+                            className="w-full bg-transparent text-neutral-900 text-xs sm:text-sm font-bold uppercase placeholder-neutral-400 focus:outline-none tracking-wider truncate"
                           />
                           {dedicatedSearchQuery && (
                             <button
                               type="button"
                               onClick={() => setDedicatedSearchQuery("")}
-                              className="text-gray-400 hover:text-white p-0.5 shrink-0 transition-colors"
+                              className="text-neutral-400 hover:text-neutral-900 p-0.5 shrink-0 transition-colors"
                               aria-label="Limpiar búsqueda"
                             >
                               <X size={14} />
@@ -3363,17 +4038,17 @@ export default function Storefront() {
                         <div className="flex items-center gap-1.5 sm:gap-5 shrink-0">
                           {/* 2. Menú / Filtro de Subcategorías */}
                           {availableSubcats.length > 0 && (
-                            <div className="relative flex items-center shrink-0 border-l border-white/15 pl-1.5 sm:pl-4">
+                            <div className="relative flex items-center shrink-0 border-l border-neutral-200 pl-1.5 sm:pl-4">
                               {/* Versión Celular: Solo icono compacto con select nativo */}
-                              <div className="sm:hidden relative flex items-center justify-center p-1.5 text-[#ffd025] hover:text-[#ffe066] cursor-pointer" title="Filtrar por subcategoría">
+                              <div className="sm:hidden relative flex items-center justify-center p-1.5 text-neutral-700 hover:text-neutral-950 cursor-pointer" title="Filtrar por subcategoría">
                                 <Layers size={17} />
                                 {dedicatedSubcatFilter !== "all" && (
-                                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#ffd025] ring-1 ring-black" />
+                                  <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#ffd129] ring-1 ring-white" />
                                 )}
                                 <select
                                   value={dedicatedSubcatFilter}
                                   onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
-                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-black"
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-white"
                                   aria-label="Filtrar por subcategoría"
                                 >
                                   <option value="all">Todas las subcategorías</option>
@@ -3385,17 +4060,17 @@ export default function Storefront() {
 
                               {/* Versión PC: Selector con etiqueta de texto */}
                               <div className="hidden sm:flex items-center gap-1.5 text-xs">
-                                <Layers size={14} className="text-[#ffd025] shrink-0" />
-                                <span className="text-gray-400 uppercase text-[10px] font-bold tracking-wider">Subcategoría:</span>
+                                <Layers size={14} className="text-[#ffd129] shrink-0" />
+                                <span className="text-neutral-500 uppercase text-[10px] font-bold tracking-wider">Subcategoría:</span>
                                 <select
                                   value={dedicatedSubcatFilter}
                                   onChange={(e) => setDedicatedSubcatFilter(e.target.value)}
-                                  className="bg-transparent text-white text-xs font-bold uppercase tracking-wider focus:outline-none cursor-pointer border-b border-white/20 hover:border-[#ffd025] pb-0.5 transition-colors"
+                                  className="bg-transparent text-neutral-900 text-xs font-bold uppercase tracking-wider focus:outline-none cursor-pointer border-b border-neutral-300 hover:border-[#ffd129] pb-0.5 transition-colors"
                                   aria-label="Filtrar por subcategoría"
                                 >
-                                  <option value="all" className="bg-[#141422] text-white">Todas las subcategorías</option>
+                                  <option value="all" className="bg-white text-neutral-900">Todas las subcategorías</option>
                                   {availableSubcats.map((sub) => (
-                                    <option key={sub} value={sub} className="bg-[#141422] text-white">{sub}</option>
+                                    <option key={sub} value={sub} className="bg-white text-neutral-900">{sub}</option>
                                   ))}
                                 </select>
                               </div>
@@ -3403,17 +4078,17 @@ export default function Storefront() {
                           )}
 
                           {/* 3. Botón / Menú de Ordenamiento */}
-                          <div className="relative flex items-center shrink-0 border-l border-white/15 pl-1.5 sm:pl-4">
+                          <div className="relative flex items-center shrink-0 border-l border-neutral-200 pl-1.5 sm:pl-4">
                             {/* Versión Celular: Solo icono compacto con select nativo */}
-                            <div className="sm:hidden relative flex items-center justify-center p-1.5 text-[#ffd025] hover:text-[#ffe066] cursor-pointer" title="Ordenar productos">
+                            <div className="sm:hidden relative flex items-center justify-center p-1.5 text-neutral-700 hover:text-neutral-950 cursor-pointer" title="Ordenar productos">
                               <Filter size={17} />
                               {dedicatedSortBy !== "default" && (
-                                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#ffd025] ring-1 ring-black" />
+                                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#ffd129] ring-1 ring-white" />
                               )}
                               <select
                                 value={dedicatedSortBy}
                                 onChange={(e) => setDedicatedSortBy(e.target.value as any)}
-                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-black"
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base bg-white"
                                 aria-label="Ordenar productos"
                               >
                                 <option value="default">Destacados</option>
@@ -3426,19 +4101,19 @@ export default function Storefront() {
 
                             {/* Versión PC: Selector con etiqueta de texto */}
                             <div className="hidden sm:flex items-center gap-1.5 text-xs">
-                              <Filter size={14} className="text-[#ffd025] shrink-0" />
-                              <span className="text-gray-400 uppercase text-[10px] font-bold tracking-wider">Ordenar:</span>
+                              <Filter size={14} className="text-[#ffd129] shrink-0" />
+                              <span className="text-neutral-500 uppercase text-[10px] font-bold tracking-wider">Ordenar:</span>
                               <select
                                 value={dedicatedSortBy}
                                 onChange={(e) => setDedicatedSortBy(e.target.value as any)}
-                                className="bg-transparent text-white text-xs font-bold uppercase tracking-wider focus:outline-none cursor-pointer border-b border-white/20 hover:border-[#ffd025] pb-0.5 transition-colors"
+                                className="bg-transparent text-neutral-900 text-xs font-bold uppercase tracking-wider focus:outline-none cursor-pointer border-b border-neutral-300 hover:border-[#ffd129] pb-0.5 transition-colors"
                                 aria-label="Ordenar productos"
                               >
-                                <option value="default" className="bg-[#141422] text-white">Destacados</option>
-                                <option value="price_asc" className="bg-[#141422] text-white">Precio: Menor a Mayor ⬇️</option>
-                                <option value="price_desc" className="bg-[#141422] text-white">Precio: Mayor a Menor ⬆️</option>
-                                <option value="name_asc" className="bg-[#141422] text-white">Nombre: A ➔ Z</option>
-                                <option value="name_desc" className="bg-[#141422] text-white">Nombre: Z ➔ A</option>
+                                <option value="default" className="bg-white text-neutral-900">Destacados</option>
+                                <option value="price_asc" className="bg-white text-neutral-900">Precio: Menor a Mayor ⬇️</option>
+                                <option value="price_desc" className="bg-white text-neutral-900">Precio: Mayor a Menor ⬆️</option>
+                                <option value="name_asc" className="bg-white text-neutral-900">Nombre: A ➔ Z</option>
+                                <option value="name_desc" className="bg-white text-neutral-900">Nombre: Z ➔ A</option>
                               </select>
                             </div>
                           </div>
@@ -3447,14 +4122,14 @@ export default function Storefront() {
 
                       {/* Lista horizontal rápida de subcategorías con líneas divisorias si existen */}
                       {availableSubcats.length > 1 && (
-                        <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1.5 -mt-2 border-b border-white/10 scrollbar-none">
+                        <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-1.5 -mt-2 border-b border-neutral-200 scrollbar-none">
                           <button
                             type="button"
                             onClick={() => setDedicatedSubcatFilter("all")}
                             className={`text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap transition-colors py-0.5 ${
                               dedicatedSubcatFilter === "all"
-                                ? "text-[#ffd025] font-black border-b-2 border-[#ffd025]"
-                                : "text-gray-400 hover:text-white font-semibold"
+                                ? "text-neutral-900 font-black border-b-2 border-[#ffd129]"
+                                : "text-neutral-500 hover:text-neutral-900 font-semibold"
                             }`}
                           >
                             Todas ({processed.length})
@@ -3463,14 +4138,14 @@ export default function Storefront() {
                             const subCount = processed.filter((p) => (p.subcategory || p.category) === sub).length;
                             return (
                               <Fragment key={sub}>
-                                <span className="text-white/15 text-[10px] select-none">•</span>
+                                <span className="text-neutral-300 text-[10px] select-none">•</span>
                                 <button
                                   type="button"
                                   onClick={() => setDedicatedSubcatFilter(sub)}
                                   className={`text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap transition-colors py-0.5 ${
                                     dedicatedSubcatFilter === sub
-                                      ? "text-[#ffd025] font-black border-b-2 border-[#ffd025]"
-                                      : "text-gray-400 hover:text-white font-semibold"
+                                      ? "text-neutral-900 font-black border-b-2 border-[#ffd129]"
+                                      : "text-neutral-500 hover:text-neutral-900 font-semibold"
                                   }`}
                                 >
                                   {sub} ({subCount})
@@ -3482,8 +4157,8 @@ export default function Storefront() {
                       )}
 
                       {/* Header con conteo */}
-                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                        <span className="text-xs sm:text-sm font-black uppercase text-[#ffd025] tracking-wider">
+                      <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
+                        <span className="text-xs sm:text-sm font-black uppercase text-neutral-900 tracking-wider">
                           {isOpp
                             ? "Lista de Oportunidades"
                             : isPacks
@@ -3494,15 +4169,15 @@ export default function Storefront() {
                             ? `Categoría: ${activeCategory}`
                             : "Todos los Productos"}
                         </span>
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">
+                        <span className="text-[10px] text-neutral-500 font-bold uppercase">
                           {processed.length} {processed.length === 1 ? "producto" : "productos"}
                         </span>
                       </div>
 
                       {/* Grilla de Productos */}
                       {processed.length === 0 ? (
-                        <div className="text-center py-12 border border-dashed border-white/10 rounded-2xl bg-white/[0.02]">
-                          <p className="text-xs text-gray-400">No hay productos que coincidan con la búsqueda o filtros seleccionados.</p>
+                        <div className="text-center py-12 border border-dashed border-neutral-300 rounded-2xl bg-neutral-50">
+                          <p className="text-xs text-neutral-500">No hay productos que coincidan con la búsqueda o filtros seleccionados.</p>
                         </div>
                       ) : (() => {
                         const len = processed.length;
@@ -3530,7 +4205,7 @@ export default function Storefront() {
                                 className="group flex flex-col justify-between h-full w-full"
                               >
                                 <div>
-                                  <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                                  <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
                                     {product.image ? (
                                       <img
                                         src={product.image}
@@ -3544,9 +4219,9 @@ export default function Storefront() {
                                         }}
                                       />
                                     ) : (
-                                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
-                                        <Package size={20} className="text-[#ffd025]/70" />
-                                        <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
+                                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
+                                        <Package size={20} className="text-[#ffd129]" />
+                                        <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
                                       </div>
                                     )}
 
@@ -3561,7 +4236,7 @@ export default function Storefront() {
 
                                   <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
                                     {(product.subcategory || product.category || product.aisle) ? (
-                                      <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                                      <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-neutral-500 truncate block w-full">
                                         {product.subcategory || product.category || product.aisle}
                                       </span>
                                     ) : (
@@ -3573,21 +4248,21 @@ export default function Storefront() {
 
                                   <h4
                                     title={product.name}
-                                    className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                                    className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
                                   >
                                     {product.name}
                                   </h4>
                                 </div>
 
-                                <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
-                                  <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                                <div className="mt-2 pt-1.5 border-t border-neutral-200 flex items-center justify-between gap-1">
+                                  <span className="text-[11px] sm:text-xs md:text-sm font-black text-neutral-900 truncate">
                                     ${Number(product.price || 0).toLocaleString("es-CL")}
                                   </span>
 
                                   <button
                                     onClick={() => handleAddToCartClick(product)}
                                     disabled={!isStoreOpen}
-                                    className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                    className="h-6 px-1.5 sm:px-2.5 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                                     title="Añadir al carrito"
                                     aria-label="Añadir al carrito"
                                   >
@@ -3607,7 +4282,7 @@ export default function Storefront() {
             </div>
           ) : (
             <>
-              {/* BANNER PRINCIPAL O BANNER DE PASILLO SELECCIONADO */}
+              {/* BANNER PRINCIPAL INFINITO DE ESQUINA A ESQUINA (ADAPTABLE SIN RECORTE NI ZOOM) */}
               {!searchQuery && (() => {
                 const selectedAisleObj = activeAisle ? aislesData.find((a) => a.name === activeAisle) : null;
                 const bannerToShow = selectedAisleObj?.bannerImage
@@ -3616,40 +4291,64 @@ export default function Storefront() {
 
                 if (bannerToShow.length === 0) return null;
 
+                const safeSlideIdx = activeSlide % bannerToShow.length;
+
                 return (
-                  <div className="w-full px-3 sm:px-6 md:px-8 mt-3 sm:mt-5 mb-6 sm:mb-8">
-                    <div
-                      className="relative w-full h-36 sm:h-48 md:h-64 lg:h-[280px] xl:h-[320px] shadow-lg border border-white/10 bg-black select-none rounded-xl sm:rounded-2xl overflow-hidden"
-                      style={{ transform: "translateZ(0)", WebkitMaskImage: "-webkit-radial-gradient(white, black)" }}
-                    >
-                      {bannerToShow.map((slide, i) => (
-                        <div
-                          key={i}
-                          className="absolute inset-0 transition-opacity duration-700"
-                          style={{ opacity: i === activeSlide ? 1 : 0, zIndex: i === activeSlide ? 2 : 1 }}
-                        >
-                          {slide.image && (
-                            <img
-                              loading={i === 0 ? "eager" : "lazy"}
-                              decoding="async"
-                              fetchPriority={i === 0 ? "high" : "auto"}
-                              src={slide.image}
-                              alt="Banner"
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-                      ))}
+                  <div
+                    className="w-full mb-5 sm:mb-8 select-none overflow-hidden relative"
+                    onTouchStart={(e) => {
+                      (window as any).__bannerTouchStartX = e.touches[0].clientX;
+                    }}
+                    onTouchEnd={(e) => {
+                      const startX = (window as any).__bannerTouchStartX;
+                      if (typeof startX === "number") {
+                        const diff = startX - e.changedTouches[0].clientX;
+                        if (Math.abs(diff) > 40 && bannerToShow.length > 1) {
+                          if (diff > 0) {
+                            setActiveSlide((prev) => (prev + 1) % bannerToShow.length);
+                          } else {
+                            setActiveSlide((prev) => (prev - 1 + bannerToShow.length) % bannerToShow.length);
+                          }
+                        }
+                      }
+                      (window as any).__bannerTouchStartX = null;
+                    }}
+                  >
+                    {/* Contenedor infinito de esquina a esquina con formato apaisado horizontal y la misma relación de aspecto para todos los slides */}
+                    <div className="relative w-full overflow-hidden bg-neutral-100 aspect-[16/7] sm:aspect-[21/8] md:aspect-[24/8]">
+                      {bannerToShow.map((slide, idx) => {
+                        const isCurrent = idx === safeSlideIdx;
+                        return (
+                          <div
+                            key={slide.image ? `${slide.image}-${idx}` : idx}
+                            className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ease-in-out ${
+                              isCurrent ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
+                            }`}
+                          >
+                            {slide.image && (
+                              <img
+                                loading={idx === 0 ? "eager" : "lazy"}
+                                decoding="async"
+                                fetchPriority={idx === 0 ? "high" : "auto"}
+                                src={slide.image}
+                                alt={slide.title || "Banner"}
+                                className="w-full h-full object-cover object-center select-none pointer-events-none"
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Indicadores sutiles de progreso en la parte inferior (sin botones laterales para que avance solo) */}
                       {bannerToShow.length > 1 && !selectedAisleObj && (
-                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
+                        <div className="absolute bottom-2 sm:bottom-3.5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 bg-black/35 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-md pointer-events-none">
                           {bannerToShow.map((_, i) => (
-                            <button
+                            <span
                               key={i}
-                              onClick={() => setActiveSlide(i)}
-                              className={`rounded-full transition-all duration-300 ${
-                                i === activeSlide
-                                  ? "w-5 h-2 bg-[#ffd025]"
-                                  : "w-2 h-2 bg-white/40 hover:bg-white/70"
+                              className={`rounded-full transition-all duration-500 ${
+                                i === safeSlideIdx
+                                  ? "w-4 sm:w-5 h-1.5 sm:h-2 bg-[#ffd129]"
+                                  : "w-1.5 sm:w-2 h-1.5 sm:h-2 bg-white/60"
                               }`}
                             />
                           ))}
@@ -3667,15 +4366,15 @@ export default function Storefront() {
                 const recommendedSection = promoProducts.length === 0 ? null : (
                   <section className="w-full mb-6 sm:mb-8">
                     <div className="w-full px-3 sm:px-6 md:px-8 mb-3 sm:mb-4 flex items-center gap-3 sm:gap-4">
-                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/20" />
-                      <span className="text-[10px] sm:text-xs md:text-sm font-black tracking-widest text-[#ffd025] uppercase shrink-0 px-1 select-none whitespace-nowrap drop-shadow">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-neutral-300 to-neutral-200" />
+                      <span className="text-[10px] sm:text-xs md:text-sm font-black tracking-widest text-[#141414] uppercase shrink-0 px-1 select-none whitespace-nowrap">
                         #NUESTROSRECOMENDADOS
                       </span>
-                      <div className="flex-1 h-px bg-gradient-to-l from-transparent via-white/20 to-white/20" />
+                      <div className="flex-1 h-px bg-gradient-to-l from-transparent via-neutral-300 to-neutral-200" />
                     </div>
 
                     <div className="w-full px-3 sm:px-6 md:px-8">
-                      <div className="w-full h-16 sm:h-28 md:h-48 lg:h-60 xl:h-72 overflow-hidden rounded-none border border-white/10 mb-3 sm:mb-4 bg-black select-none">
+                      <div className="w-full h-16 sm:h-28 md:h-48 lg:h-60 xl:h-72 overflow-hidden rounded-none border border-neutral-200 mb-3 sm:mb-4 bg-neutral-100 select-none">
                         <img
                           src={settings.promoBannerImage || "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=1600&auto=format&fit=crop&q=80"}
                           alt="Promociones Fellas"
@@ -3704,7 +4403,7 @@ export default function Storefront() {
                                   className="group flex flex-col justify-between h-full w-full"
                                 >
                                   <div>
-                                    <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                                    <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
                                       {product.image ? (
                                         <img
                                           src={product.image}
@@ -3718,9 +4417,9 @@ export default function Storefront() {
                                           }}
                                         />
                                       ) : (
-                                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
-                                          <Package size={20} className="text-[#ffd025]/70" />
-                                          <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
+                                          <Package size={20} className="text-[#ffd129]" />
+                                          <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
                                         </div>
                                       )}
 
@@ -3733,7 +4432,7 @@ export default function Storefront() {
 
                                     <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
                                       {(product.aisle || product.category) ? (
-                                        <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                                        <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-neutral-500 truncate block w-full">
                                           {product.aisle || product.category}
                                         </span>
                                       ) : (
@@ -3745,21 +4444,21 @@ export default function Storefront() {
 
                                     <h4
                                       title={product.name}
-                                      className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                                      className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
                                     >
                                       {product.name}
                                     </h4>
                                   </div>
 
-                                  <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
-                                    <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                                  <div className="mt-2 pt-1.5 border-t border-neutral-200 flex items-center justify-between gap-1">
+                                    <span className="text-[11px] sm:text-xs md:text-sm font-black text-neutral-900 truncate">
                                       ${Number(product.price || 0).toLocaleString("es-CL")}
                                     </span>
 
                                     <button
                                       onClick={() => handleAddToCartClick(product)}
                                       disabled={!isStoreOpen}
-                                      className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                      className="h-6 px-1.5 sm:px-2.5 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                                       title="Añadir al carrito"
                                       aria-label="Añadir al carrito"
                                     >
@@ -3785,14 +4484,14 @@ export default function Storefront() {
                 const collectionsSection = !showCollections ? null : (
                   <section className="w-full mb-6 sm:mb-8" id="nuestras-colecciones-section">
                     <div className="w-full px-3 sm:px-6 md:px-8 mb-3 sm:mb-4 flex items-center gap-3 sm:gap-4">
-                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/20" />
-                      <span className="text-[10px] sm:text-xs md:text-sm font-black tracking-widest text-[#ffd025] uppercase shrink-0 px-1 select-none whitespace-nowrap drop-shadow">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-neutral-300 to-neutral-200" />
+                      <span className="text-[10px] sm:text-xs md:text-sm font-black tracking-widest text-[#141414] uppercase shrink-0 px-1 select-none whitespace-nowrap">
                         #NUESTRASCOLECCIONES
                       </span>
-                      <div className="flex-1 h-px bg-gradient-to-l from-transparent via-white/20 to-white/20" />
+                      <div className="flex-1 h-px bg-gradient-to-l from-transparent via-neutral-300 to-neutral-200" />
                       <button
                         onClick={handleDiscoverRandomSection}
-                        className="text-[10.5px] sm:text-xs font-semibold text-gray-400 hover:text-[#ffd025] uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                        className="text-[10.5px] sm:text-xs font-semibold text-neutral-500 hover:text-[#141414] uppercase tracking-wider transition-colors flex items-center gap-1 cursor-pointer shrink-0"
                         title="Descubrir una sección o pasillo al azar"
                       >
                         <span>Ver más</span>
@@ -3802,7 +4501,7 @@ export default function Storefront() {
 
                     <div className="w-full px-3 sm:px-6 md:px-8">
                       {/* Banner Exclusivo de Nuestras Colecciones (fijo, independiente de pasillos) */}
-                      <div className="w-full h-16 sm:h-28 md:h-48 lg:h-60 xl:h-72 overflow-hidden rounded-none border border-white/10 mb-3 sm:mb-4 bg-black select-none relative">
+                      <div className="w-full h-16 sm:h-28 md:h-48 lg:h-60 xl:h-72 overflow-hidden rounded-none border border-neutral-200 mb-3 sm:mb-4 bg-neutral-100 select-none relative">
                         <img
                           src={collectionsBanner}
                           alt="Nuestras Colecciones"
@@ -3820,7 +4519,7 @@ export default function Storefront() {
                             className="group flex flex-col justify-between h-full w-full"
                           >
                             <div>
-                              <div className="relative w-full aspect-square overflow-hidden bg-black/40 mb-1.5 sm:mb-2">
+                              <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
                                 {product.image ? (
                                   <img
                                     src={product.image}
@@ -3834,9 +4533,9 @@ export default function Storefront() {
                                     }}
                                   />
                                 ) : (
-                                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-white/5 rounded-none">
-                                    <Package size={20} className="text-[#ffd025]/70" />
-                                    <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase">Fellas</span>
+                                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
+                                    <Package size={20} className="text-[#ffd129]" />
+                                    <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
                                   </div>
                                 )}
 
@@ -3851,7 +4550,7 @@ export default function Storefront() {
 
                               <div className="h-3.5 sm:h-4 flex items-center mb-0.5 overflow-hidden">
                                 {(product.subcategory || product.category || product.aisle) ? (
-                                  <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-gray-400 truncate block w-full">
+                                  <span className="text-[7.5px] xs:text-[8px] sm:text-[9px] font-medium uppercase tracking-wider text-neutral-500 truncate block w-full">
                                     {product.subcategory || product.category || product.aisle}
                                   </span>
                                 ) : (
@@ -3863,21 +4562,21 @@ export default function Storefront() {
 
                               <h4
                                 title={product.name}
-                                className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-white leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd025] transition-colors"
+                                className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
                               >
                                 {product.name}
                               </h4>
                             </div>
 
-                            <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between gap-1">
-                              <span className="text-[11px] sm:text-xs md:text-sm font-black text-[#ffd025] truncate">
+                            <div className="mt-2 pt-1.5 border-t border-neutral-200 flex items-center justify-between gap-1">
+                              <span className="text-[11px] sm:text-xs md:text-sm font-black text-neutral-900 truncate">
                                 ${Number(product.price || 0).toLocaleString("es-CL")}
                               </span>
 
                               <button
                                 onClick={() => handleAddToCartClick(product)}
                                 disabled={!isStoreOpen}
-                                className="h-6 px-1.5 sm:px-2.5 bg-[#ffd025] hover:bg-[#e5b81a] text-black font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                className="h-6 px-1.5 sm:px-2.5 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-[10px] sm:text-xs uppercase transition-all flex items-center justify-center gap-1 rounded-none hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                                 title="Añadir al carrito"
                                 aria-label="Añadir al carrito"
                               >
@@ -3928,8 +4627,8 @@ export default function Storefront() {
             </>
           )}
 
-          {/* PIE DE PÁGINA: EXACTAMENTE EL DISEÑO ANTERIOR EN 2 COLUMNAS CON LÍNEA CENTRAL, AMPLIO A LO ANCHO */}
-          <footer className="mt-5 sm:mt-8 pt-5 pb-5 border-t border-white/10 bg-black/60 text-gray-400">
+          {/* PIE DE PÁGINA: EXACTAMENTE EL DISEÑO EN 2 COLUMNAS CON LÍNEA CENTRAL, AMPLIO A LO ANCHO */}
+          <footer className="mt-5 sm:mt-8 pt-5 pb-5 border-t border-neutral-200 bg-[#141414] text-gray-400">
             <div className="w-full px-2.5 sm:px-6 md:px-8 lg:px-10">
               {/* Distribución en 2 Columnas con línea divisoria central, amplia a lo ancho */}
               <div className="w-full grid grid-cols-2 gap-2.5 sm:gap-6 items-start">
@@ -3943,7 +4642,7 @@ export default function Storefront() {
                         className="h-8 sm:h-11 w-auto max-w-[130px] sm:max-w-[170px] object-contain"
                       />
                     ) : (
-                      <h3 className="text-xs sm:text-base font-black tracking-wider text-[#ffd025] uppercase">
+                      <h3 className="text-xs sm:text-base font-black tracking-wider text-[#ffd129] uppercase">
                         {settings.pageTitle || "FELLA'S MARKET"}
                       </h3>
                     )}
@@ -3961,7 +4660,7 @@ export default function Storefront() {
                       href={settings.socialInstagram || "https://instagram.com"}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-[#ffd025] hover:text-black border border-white/15 flex items-center justify-center text-gray-300 transition-all shadow shrink-0"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-[#ffd129] hover:text-black border border-white/15 flex items-center justify-center text-gray-300 transition-all shadow shrink-0"
                       title="Instagram"
                       aria-label="Instagram"
                     >
@@ -3971,7 +4670,7 @@ export default function Storefront() {
                       href={settings.socialFacebook || "https://facebook.com"}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-[#ffd025] hover:text-black border border-white/15 flex items-center justify-center text-gray-300 transition-all shadow shrink-0"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-[#ffd129] hover:text-black border border-white/15 flex items-center justify-center text-gray-300 transition-all shadow shrink-0"
                       title="Facebook"
                       aria-label="Facebook"
                     >
@@ -4004,7 +4703,7 @@ export default function Storefront() {
                       }}
                       className={`text-[9.5px] sm:text-[11px] uppercase tracking-wider transition-colors ${
                         !activeCategory && !activeAisle && !navQuickFilter
-                          ? "text-[#ffd025] font-black"
+                          ? "text-[#ffd129] font-black"
                           : "text-gray-400 hover:text-white font-medium"
                       }`}
                     >
@@ -4012,6 +4711,8 @@ export default function Storefront() {
                     </button>
                     {(aisles.length > 0 ? aisles : categories)
                       .filter((item) => {
+                        const lower = item.toLowerCase();
+                        if (lower.includes("oportunidad") || lower.includes("pack")) return false;
                         const isAisle = aisles.includes(item);
                         const count = baseProducts.filter((p) =>
                           isAisle ? p.aisle === item : p.category === item
@@ -4089,9 +4790,9 @@ export default function Storefront() {
       )}
 
       {checkoutOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setCheckoutOpen(false)} />
-          <div className="relative w-full max-w-sm bg-[#1a1a1a] border border-[#ffd025]/30 rounded-3xl shadow-2xl animate-fade-in overflow-hidden">
+          <div className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-3xl shadow-2xl animate-fade-in overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
               <div>
@@ -4129,10 +4830,10 @@ export default function Storefront() {
                           key={type}
                           type="button"
                           onClick={() => setCheckoutForm({ ...checkoutForm, deliveryType: type })}
-                          className={`flex flex-col items-center justify-center gap-2 py-5 px-3 rounded-2xl border-2 font-bold text-sm transition-all ${
+                          className={`flex flex-col items-center justify-center gap-2 py-5 px-3 rounded-2xl border font-bold text-sm transition-all ${
                             checkoutForm.deliveryType === type
-                              ? "bg-[#ffd025]/10 border-[#ffd025] text-[#ffd025]"
-                              : "bg-[#141414] border-gray-700 text-gray-400 hover:border-[#ffd025]/40"
+                              ? "bg-white/20 border-white/40 text-white"
+                              : "bg-[#141414] border-gray-700 text-gray-400 hover:border-gray-500"
                           }`}
                         >
                           <span className="text-3xl">{type === "retiro" ? "🏪" : "🛵"}</span>
@@ -4141,7 +4842,7 @@ export default function Storefront() {
                       ))}
                     </div>
                     {checkoutForm.deliveryType === "delivery" && !deliveryMinimumMet && (
-                      <p className="text-[11px] text-amber-400 bg-amber-950/40 border border-amber-600/30 rounded-xl px-3 py-2.5 leading-snug">
+                      <p className="text-[11px] text-amber-400 bg-amber-950/40 border border-white/10 rounded-xl px-3 py-2.5 leading-snug">
                         ⚠️ Mínimo para delivery: <span className="font-black">${deliveryMinimum.toLocaleString("es-CL")}</span>. Agrega más productos.
                       </p>
                     )}
@@ -4154,10 +4855,10 @@ export default function Storefront() {
                               key={loc.id}
                               type="button"
                               onClick={() => setSelectedLocation(loc)}
-                              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 font-semibold text-sm transition-all ${
+                              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border font-semibold text-sm transition-all ${
                                 selectedLocation?.id === loc.id
-                                  ? "bg-[#ffd025]/10 border-[#ffd025] text-[#ffd025]"
-                                  : "bg-[#141414] border-gray-700 text-gray-300 hover:border-[#ffd025]/40"
+                                  ? "bg-white/20 border-white/40 text-white"
+                                  : "bg-[#141414] border-gray-700 text-gray-300 hover:border-gray-500"
                               }`}
                             >
                               <span>📍 {loc.name}</span>
@@ -4167,10 +4868,10 @@ export default function Storefront() {
                         </div>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 border border-[#ffd025]/20" style={{ background: "linear-gradient(135deg,rgba(255,208,37,0.08),rgba(255,138,0,0.06))" }}>
+                    <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 border border-white/10 bg-white/5">
                       <span className="text-base">💳</span>
-                      <p className="text-[11px] text-[#ffd025]/80 font-semibold leading-snug">
-                        Pago por <span className="font-black text-[#ffd025]">transferencia</span>. Los datos se coordinan por WhatsApp.
+                      <p className="text-[11px] text-gray-300 font-semibold leading-snug">
+                        Pago por <span className="font-black text-white">transferencia</span>. Los datos se coordinan por WhatsApp.
                       </p>
                     </div>
                     <button
@@ -4198,7 +4899,7 @@ export default function Storefront() {
                         autoFocus
                         value={checkoutForm.customerName}
                         onChange={e => setCheckoutForm({ ...checkoutForm, customerName: e.target.value })}
-                        className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]"
+                        className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/40"
                         placeholder="Tu nombre"
                       />
                     </div>
@@ -4209,7 +4910,7 @@ export default function Storefront() {
                         required
                         value={checkoutForm.phone}
                         onChange={e => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
-                        className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]"
+                        className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/40"
                         placeholder="+56 9..."
                       />
                     </div>
@@ -4234,9 +4935,9 @@ export default function Storefront() {
                   <div className="space-y-3 animate-fade-in">
                     {/* Logged-in customer info chip */}
                     {customer && (
-                      <div className="flex items-center gap-2.5 bg-[#141414] border border-[#ffd025]/20 rounded-xl px-3 py-2.5">
-                        <div className="w-7 h-7 rounded-full bg-[#ffd025]/15 flex items-center justify-center shrink-0">
-                          <User size={14} className="text-[#ffd025]" />
+                      <div className="flex items-center gap-2.5 bg-[#141414] border border-white/15 rounded-xl px-3 py-2.5">
+                        <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                          <User size={14} className="text-white" />
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-white leading-tight truncate">{customer.name}</p>
@@ -4253,7 +4954,7 @@ export default function Storefront() {
                           required
                           value={checkoutForm.phone}
                           onChange={e => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
-                          className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]"
+                          className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/40"
                           placeholder="+56 9..."
                         />
                       </div>
@@ -4266,7 +4967,7 @@ export default function Storefront() {
                           required={isDelivery}
                           value={checkoutForm.address}
                           onChange={e => setCheckoutForm({ ...checkoutForm, address: e.target.value })}
-                          className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]"
+                          className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/40"
                           placeholder="Calle, número, comuna"
                         />
                       </div>
@@ -4277,7 +4978,7 @@ export default function Storefront() {
                         rows={2}
                         value={checkoutForm.notes}
                         onChange={e => setCheckoutForm({ ...checkoutForm, notes: e.target.value })}
-                        className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025] resize-none"
+                        className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/40 resize-none"
                         placeholder="Instrucciones especiales..."
                       />
                     </div>
@@ -4304,11 +5005,11 @@ export default function Storefront() {
                             type="text"
                             value={discountCode}
                             onChange={e => { setDiscountCode(e.target.value.toUpperCase()); setDiscountError(""); }}
-                            className="min-w-0 flex-1 bg-[#141414] border border-[#ffd025]/20 rounded-xl py-2 px-3 text-white text-sm uppercase tracking-widest focus:outline-none focus:border-[#ffd025] placeholder-gray-600"
+                            className="min-w-0 flex-1 bg-[#141414] border border-white/15 rounded-xl py-2 px-3 text-white text-sm uppercase tracking-widest focus:outline-none focus:border-white/40 placeholder-gray-600"
                             placeholder="CÓDIGO"
                           />
                           <button type="button" onClick={applyDiscount} disabled={applyingDiscount || !discountCode.trim()}
-                            className="px-3 py-2 bg-[#ffd025]/10 border border-[#ffd025]/20 text-[#ffd025] rounded-xl text-xs font-bold hover:bg-[#ffd025]/20 transition-colors disabled:opacity-40 shrink-0 whitespace-nowrap">
+                            className="px-3 py-2 bg-white/10 border border-white/15 text-white rounded-xl text-xs font-bold hover:bg-white/20 transition-colors disabled:opacity-40 shrink-0 whitespace-nowrap">
                             {applyingDiscount ? "…" : "Aplicar"}
                           </button>
                         </div>
@@ -4316,7 +5017,7 @@ export default function Storefront() {
                       {discountError && <p className="text-red-400 text-xs mt-1">{discountError}</p>}
                     </div>
                     {/* Total */}
-                    <div className="rounded-2xl bg-[#141414] border border-[#ffd025]/15 px-4 py-3 space-y-1.5">
+                    <div className="rounded-2xl bg-[#141414] border border-white/10 px-4 py-3 space-y-1.5">
                       <div className="flex justify-between text-sm text-gray-400">
                         <span>Subtotal</span>
                         <span>${cartTotal.toLocaleString("es-CL")}</span>
@@ -4327,7 +5028,7 @@ export default function Storefront() {
                             <span>Delivery</span>
                             <span>${DELIVERY_COST.toLocaleString("es-CL")}</span>
                           </div>
-                          <p className="text-[10px] text-amber-400/70 leading-snug">🏘️ Tarifa fija dentro de Alerce.</p>
+                          <p className="text-[10px] text-gray-400 leading-snug">🏘️ Tarifa fija dentro de Alerce.</p>
                         </>
                       )}
                       {discountSavings > 0 && (
@@ -4336,9 +5037,9 @@ export default function Storefront() {
                           <span>−${discountSavings.toLocaleString("es-CL")}</span>
                         </div>
                       )}
-                      <div className="flex justify-between font-black text-base text-[#ffd025] pt-1.5 border-t border-[#ffd025]/15">
+                      <div className="flex justify-between font-black text-base text-white pt-1.5 border-t border-white/10">
                         <span>Total</span>
-                        <span>${finalTotal.toLocaleString("es-CL")}</span>
+                        <span className="text-[#ffd129]">${finalTotal.toLocaleString("es-CL")}</span>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -4348,7 +5049,7 @@ export default function Storefront() {
                       <button
                         type="submit"
                         disabled={createOrderMut.isPending || !isStoreOpen || !deliveryMinimumMet || (isDelivery && !checkoutForm.address.trim())}
-                        className="flex-1 py-3 bg-[#ffd025] text-[#141414] rounded-2xl font-black text-sm hover:bg-[#e5b81a] transition-all flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(255,208,37,0.25)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                        className="flex-1 py-3 bg-[#ffd129] text-[#141414] rounded-2xl font-black text-sm hover:bg-[#e5b81a] transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Phone size={14} /> Confirmar pedido
                       </button>
@@ -4364,74 +5065,158 @@ export default function Storefront() {
 
       {/* Customer auth modal */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => { setShowAuthModal(false); setAuthError(""); }} />
-          <div className="relative w-full max-w-sm bg-[#1a1a1a] border border-[#ffd025]/30 rounded-3xl p-6 shadow-2xl animate-fade-in">
+          <div className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-3xl p-6 shadow-2xl animate-fade-in">
             <div className="flex justify-between items-center mb-5">
-              <h2 className="text-xl font-black uppercase">
-                {authMode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+              <h2 className="text-lg font-black uppercase text-white">
+                {authStep === "email" ? "Identificación" : authStep === "password" ? "Iniciar Sesión" : "Crear Cuenta"}
               </h2>
-              <button onClick={() => { setShowAuthModal(false); setAuthError(""); }} className="text-gray-500 hover:text-white transition-colors">
+              <button onClick={() => { setShowAuthModal(false); setAuthError(""); }} className="text-gray-500 hover:text-white transition-colors cursor-pointer">
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleCustomerAuth} className="space-y-3">
-              {authMode === "register" && (
+
+            {/* ETAPA 1: CORREO */}
+            {authStep === "email" && (
+              <form onSubmit={handleCheckEmail} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Nombre</label>
-                  <input type="text" required value={authFields.name} onChange={e => setAuthFields(f => ({ ...f, name: e.target.value }))}
-                    className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]" placeholder="Tu nombre" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase">
+                      Correo Electrónico
+                    </label>
+                    <span className="text-[10px] text-gray-500 font-semibold uppercase">Paso 1 de 2</span>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={authFields.email}
+                    onChange={e => {
+                      setAuthFields(f => ({ ...f, email: e.target.value }));
+                      if (authError) setAuthError("");
+                    }}
+                    className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/50"
+                    placeholder="correo@ejemplo.com"
+                  />
                 </div>
-              )}
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
-                  {authMode === "login" ? "Correo o usuario" : "Correo electrónico"}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={authFields.email}
-                  onChange={e => setAuthFields(f => ({ ...f, email: e.target.value }))}
-                  className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]"
-                  placeholder={authMode === "login" ? "Correo o usuario (ej: admin, delivery)" : "correo@ejemplo.com"}
-                />
-              </div>
-              {authMode === "register" && (
+
+                {authError && <p className="text-red-400 text-xs text-center py-1">{authError}</p>}
+
+                <button
+                  type="submit"
+                  disabled={authLoading || !authFields.email.trim()}
+                  className="w-full py-3.5 bg-white text-[#141414] rounded-2xl font-black uppercase tracking-wider hover:bg-neutral-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                >
+                  {authLoading ? <Loader2 size={18} className="animate-spin" /> : <><span>Continuar</span><ArrowRight size={16} /></>}
+                </button>
+              </form>
+            )}
+
+            {/* ETAPA 2: CONTRASEÑA */}
+            {authStep === "password" && (
+              <form onSubmit={(e) => { e.preventDefault(); setAuthMode("login"); handleCustomerAuth(e); }} className="space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between bg-white/5 px-3 py-2 rounded-xl border border-white/10 text-xs">
+                  <div className="min-w-0 flex-1 truncate pr-2">
+                    <span className="text-gray-400 text-[10px] uppercase font-bold block">
+                      {existingCustomerName ? `Hola ${existingCustomerName}` : "Iniciando como:"}
+                    </span>
+                    <span className="text-white font-semibold truncate block text-xs">{authFields.email}</span>
+                  </div>
+                  <button type="button" onClick={() => { setAuthStep("email"); setAuthError(""); }} className="text-[11px] text-gray-400 hover:text-white underline cursor-pointer">
+                    Cambiar
+                  </button>
+                </div>
+
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Teléfono (opcional)</label>
-                  <input type="tel" value={authFields.phone} onChange={e => setAuthFields(f => ({ ...f, phone: e.target.value }))}
-                    className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]" placeholder="+56 9..." />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase">Contraseña</label>
+                    <span className="text-[10px] text-gray-500 font-semibold uppercase">Paso 2 de 2</span>
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    autoFocus
+                    value={authFields.password}
+                    onChange={e => {
+                      setAuthFields(f => ({ ...f, password: e.target.value }));
+                      if (authError) setAuthError("");
+                    }}
+                    className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/50"
+                    placeholder="••••••••"
+                  />
                 </div>
-              )}
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Contraseña</label>
-                <input type="password" required minLength={authMode === "register" ? 6 : 1} value={authFields.password} onChange={e => setAuthFields(f => ({ ...f, password: e.target.value }))}
-                  className="w-full bg-[#141414] border border-[#ffd025]/20 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-[#ffd025]" placeholder={authMode === "register" ? "Mínimo 6 caracteres" : "••••••"} />
-              </div>
-              {authError && <p className="text-red-400 text-sm text-center py-1">{authError}</p>}
-              <button type="submit" disabled={authLoading}
-                className="w-full py-3.5 bg-[#ffd025] text-[#141414] rounded-2xl font-black uppercase tracking-wider hover:bg-[#e5b81a] transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-1">
-                {authLoading ? <Loader2 size={20} className="animate-spin" /> : (authMode === "login" ? "Ingresar" : "Crear cuenta")}
-              </button>
-            </form>
-            <p className="text-center text-sm text-gray-500 mt-4">
-              {authMode === "login" ? "¿No tienes cuenta?" : "¿Ya tienes cuenta?"}
-              <button onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthError(""); }} className="text-[#ffd025] font-bold ml-1 hover:underline">
-                {authMode === "login" ? "Crear cuenta" : "Iniciar sesión"}
-              </button>
-            </p>
+
+                {authError && <p className="text-red-400 text-xs text-center py-1">{authError}</p>}
+
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => { setAuthStep("email"); setAuthError(""); }} className="px-4 py-3 bg-white/5 text-gray-400 hover:text-white rounded-2xl text-xs font-bold transition-colors cursor-pointer">
+                    <ArrowLeft size={16} />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={authLoading || !authFields.password.trim()}
+                    className="flex-1 py-3.5 bg-white text-[#141414] rounded-2xl font-black uppercase tracking-wider hover:bg-neutral-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                  >
+                    {authLoading ? <Loader2 size={18} className="animate-spin" /> : "Iniciar Sesión"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ETAPA 2: REGISTRO AUTOMÁTICO */}
+            {authStep === "register" && (
+              <form onSubmit={(e) => { e.preventDefault(); setAuthMode("register"); handleCustomerAuth(e); }} className="space-y-3 animate-fade-in">
+                <div className="flex items-center justify-between bg-white/5 px-3 py-2 rounded-xl border border-white/10 text-xs">
+                  <div className="min-w-0 flex-1 truncate pr-2">
+                    <span className="text-gray-400 text-[10px] uppercase font-bold block">Creando cuenta para:</span>
+                    <span className="text-white font-semibold truncate block text-xs">{authFields.email}</span>
+                  </div>
+                  <button type="button" onClick={() => { setAuthStep("email"); setAuthError(""); }} className="text-[11px] text-gray-400 hover:text-white underline cursor-pointer">
+                    Cambiar
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Nombre Completo</label>
+                  <input type="text" required autoFocus value={authFields.name} onChange={e => setAuthFields(f => ({ ...f, name: e.target.value }))}
+                    className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/50" placeholder="Tu nombre" />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Contraseña (Mín. 6)</label>
+                  <input type="password" required minLength={6} value={authFields.password} onChange={e => setAuthFields(f => ({ ...f, password: e.target.value }))}
+                    className="w-full bg-[#141414] border border-white/15 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-white/50" placeholder="Mínimo 6 caracteres" />
+                </div>
+
+                {authError && <p className="text-red-400 text-xs text-center py-1">{authError}</p>}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button type="button" onClick={() => { setAuthStep("email"); setAuthError(""); }} className="px-4 py-3 bg-white/5 text-gray-400 hover:text-white rounded-2xl text-xs font-bold transition-colors cursor-pointer">
+                    <ArrowLeft size={16} />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={authLoading || !authFields.name.trim() || !authFields.password.trim()}
+                    className="flex-1 py-3.5 bg-white text-[#141414] rounded-2xl font-black uppercase tracking-wider hover:bg-neutral-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md text-xs"
+                  >
+                    {authLoading ? <Loader2 size={18} className="animate-spin" /> : "Crear e Ingresar"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
 
       {/* Customer account panel */}
       {showAccountPanel && customer && (
-        <div className="fixed inset-0 z-[65]" onClick={() => setShowAccountPanel(false)}>
-          <div className="absolute top-[72px] right-4 w-80 bg-[#1a1a1a] border border-[#ffd025]/30 rounded-2xl shadow-2xl overflow-hidden animate-fade-in" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[200]" onClick={() => setShowAccountPanel(false)}>
+          <div className="absolute top-[72px] right-4 w-80 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#ffd025]/20 rounded-full flex items-center justify-center shrink-0">
-                  <User size={20} className="text-[#ffd025]" />
+                <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+                  <User size={20} className="text-white" />
                 </div>
                 <div className="min-w-0">
                   <p className="font-bold text-sm truncate">{customer.name}</p>
@@ -4482,34 +5267,72 @@ export default function Storefront() {
 
       {view === "admin-login" && (
         <div className="min-h-screen flex items-center justify-center p-4 bg-[#141414]">
-          <div className="bg-[#1a1a1a] p-8 rounded-3xl w-full max-w-sm border border-[#ffd025]/20 shadow-2xl text-center">
-            <div className="w-20 h-20 bg-[#ffd025]/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <SettingsIcon className="w-10 h-10 text-[#ffd025]" />
+          <div className="bg-[#1a1a1a] p-8 rounded-3xl w-full max-w-sm border border-white/10 shadow-2xl text-center">
+            <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6">
+              {usernameInput.toLowerCase() === "delivery" ? (
+                <Truck className="w-10 h-10 text-emerald-400" />
+              ) : (
+                <SettingsIcon className="w-10 h-10 text-[#ffd025]" />
+              )}
             </div>
-            <h2 className="text-2xl font-black uppercase mb-2">Administración</h2>
-            <p className="text-gray-400 text-sm mb-6">Ingresa tu contraseña para acceder.</p>
-            <div className="mb-6">
-              <input
-                type="password"
-                placeholder="Contraseña"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                className="w-full bg-[#141414] border border-[#ffd025]/30 rounded-xl p-4 text-center text-white text-lg tracking-widest focus:outline-none focus:border-[#ffd025] transition-colors"
-              />
+            <h2 className="text-2xl font-black uppercase mb-1 text-white">
+              {usernameInput.toLowerCase() === "delivery" ? "Panel Delivery" : "Autoadministración"}
+            </h2>
+            <p className="text-gray-400 text-xs mb-6">
+              Ingresa tu nombre de usuario y clave para acceder.
+            </p>
+
+            <div className="space-y-3 mb-6 text-left">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                  Nombre de Usuario
+                </label>
+                <div className="relative flex items-center">
+                  <User size={16} className="absolute left-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="admin o delivery"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    className="w-full bg-[#141414] border border-white/15 rounded-xl pl-10 pr-3.5 py-3 text-white text-sm focus:outline-none focus:border-white/50 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                  Clave
+                </label>
+                <div className="relative flex items-center">
+                  <Lock size={16} className="absolute left-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    className="w-full bg-[#141414] border border-white/15 rounded-xl pl-10 pr-3.5 py-3 text-white text-sm focus:outline-none focus:border-white/50 transition-colors"
+                  />
+                </div>
+              </div>
             </div>
+
             <button
               onClick={handleLogin}
-              className="w-full py-4 bg-[#ffd025] text-[#141414] rounded-xl font-bold uppercase hover:bg-[#e5b81a] transition-colors mb-4 shadow-lg shadow-[#ffd025]/20"
+              className="w-full py-3.5 bg-white text-[#141414] rounded-xl font-black uppercase text-xs tracking-wider hover:bg-neutral-200 transition-colors mb-3 shadow-lg cursor-pointer flex items-center justify-center gap-2"
             >
-              Ingresar al Panel
+              <LogIn size={16} /> Ingresar
             </button>
             <button
               onClick={() => {
                 setView("client");
                 setPasswordInput("");
+                setUsernameInput("");
               }}
-              className="w-full py-3 bg-transparent text-gray-500 font-bold uppercase hover:text-white transition-colors text-sm"
+              className="w-full py-2.5 bg-transparent text-gray-400 font-bold uppercase hover:text-white transition-colors text-xs cursor-pointer"
             >
               Volver a la tienda
             </button>
@@ -5663,7 +6486,7 @@ export default function Storefront() {
                             </span>
                           </div>
                           <p className="text-[11px] text-gray-400 mt-0.5">
-                            Banners rotativos grandes que se visualizan en la parte superior de la portada principal.
+                            Banners rotativos apaisados horizontales (misma relación de aspecto, formato panorámico) que avanzan automáticamente de esquina a esquina sin botones manuales.
                           </p>
                         </div>
 

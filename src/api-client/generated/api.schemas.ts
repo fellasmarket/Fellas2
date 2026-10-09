@@ -185,6 +185,7 @@ export interface OrderInput {
 }
 
 export interface AdminLoginRequest {
+  username?: string;
   password: string;
 }
 

@@ -1447,10 +1447,24 @@ apiRouter.delete("/orders/:id", (req, res) => {
 
 // 9. Admin
 apiRouter.post("/admin/login", (req, res) => {
+  const username = String(req.body.username || "").trim().toLowerCase();
   const password = String(req.body.password || "").trim();
   const configuredPassword = process.env.ADMIN_PASSWORD || "fellhonpm";
   const deliveryPassword = process.env.DELIVERY_PASSWORD || "botifelldely";
 
+  // Check if credentials match admin (by username + password or just password)
+  const isAdminUser = !username || username === "admin" || username === "administrador" || username === "admin@fellas.cl" || username === "admin@gmail.com";
+  const isDeliveryUser = !username || username === "delivery" || username === "reparto" || username === "delivery@fellas.cl" || username === "delivery@gmail.com";
+
+  if ((isAdminUser && (password === "fellhonpm" || password === configuredPassword)) || (username === "admin" && (password === "fellhonpm" || password === configuredPassword))) {
+    res.json({ ok: true, role: "admin" });
+    return;
+  }
+  if ((isDeliveryUser && (password === "botifelldely" || password === deliveryPassword)) || (username === "delivery" && (password === "botifelldely" || password === deliveryPassword))) {
+    res.json({ ok: true, role: "delivery" });
+    return;
+  }
+  // Fallbacks if only password matches
   if (password === "fellhonpm" || password === configuredPassword) {
     res.json({ ok: true, role: "admin" });
     return;
@@ -1459,7 +1473,7 @@ apiRouter.post("/admin/login", (req, res) => {
     res.json({ ok: true, role: "delivery" });
     return;
   }
-  res.status(401).json({ ok: false, error: "Contraseña incorrecta" });
+  res.status(401).json({ ok: false, error: "Usuario o contraseña incorrectos" });
 });
 
 apiRouter.get("/admin/stats", (_req, res) => {
@@ -1769,6 +1783,28 @@ apiRouter.post("/customers/register", async (req, res) => {
   });
   const token = jwt.sign({ customerId: customer.id }, JWT_SECRET, { expiresIn: "30d" });
   res.status(201).json({ customer: { id: customer.id, email: customer.email, name: customer.name, phone: customer.phone }, token });
+});
+
+apiRouter.post("/customers/check-email", (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "Email requerido" });
+    return;
+  }
+  const cleanEmail = email.trim().toLowerCase();
+  if (
+    cleanEmail === "admin" ||
+    cleanEmail === "admin@fellas.cl" ||
+    cleanEmail === "admin@gmail.com" ||
+    cleanEmail === "delivery" ||
+    cleanEmail === "delivery@fellas.cl" ||
+    cleanEmail === "delivery@gmail.com"
+  ) {
+    res.json({ exists: true, isAdmin: true, name: cleanEmail === "admin" ? "Administrador" : "Delivery" });
+    return;
+  }
+  const existing = dbManager.getCustomerByEmail(cleanEmail);
+  res.json({ exists: !!existing, name: existing ? existing.name : "" });
 });
 
 apiRouter.post("/customers/login", async (req, res) => {

@@ -60,11 +60,11 @@ export function StoreGallery({
         situado justo al medio, con una línea a cada lado del texto.
       */}
       <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
-        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-white/20 to-white/20" />
-        <span className="text-[10px] sm:text-xs md:text-sm font-black tracking-widest text-[#ffd025] uppercase shrink-0 px-1 select-none whitespace-nowrap drop-shadow">
+        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-neutral-300 to-neutral-200" />
+        <span className="text-[10px] sm:text-xs md:text-sm font-black tracking-widest text-[#141414] uppercase shrink-0 px-1 select-none whitespace-nowrap">
           {tagText}
         </span>
-        <div className="flex-1 h-px bg-gradient-to-l from-transparent via-white/20 to-white/20" />
+        <div className="flex-1 h-px bg-gradient-to-l from-transparent via-neutral-300 to-neutral-200" />
       </div>
 
       {/* 
@@ -82,7 +82,7 @@ export function StoreGallery({
           return (
             <div
               key={img.id || idx}
-              className={`group relative aspect-[4/5] overflow-hidden bg-[#0d0d15] cursor-default select-none border border-white/5 transition-colors ${
+              className={`group relative aspect-[4/5] overflow-hidden bg-neutral-100 cursor-default select-none border border-neutral-200 transition-colors ${
                 isHiddenOnMobile ? "hidden sm:block" : "block"
               }`}
             >
