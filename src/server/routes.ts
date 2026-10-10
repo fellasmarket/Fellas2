@@ -859,10 +859,17 @@ apiRouter.get("/products", (_req, res) => {
 
 apiRouter.post("/products", (req, res) => {
   const body = req.body;
+  const rawImages = Array.isArray(body.images)
+    ? (body.images as string[]).map((s) => String(s || "").trim()).filter(Boolean)
+    : [];
+  const primaryImage = body.image || rawImages[0] || "";
+  const finalImages = rawImages.length ? rawImages : (primaryImage ? [primaryImage] : []);
+
   const created = dbManager.addProduct({
     name: body.name,
     price: Number(body.price) || 0,
-    image: body.image || "",
+    image: primaryImage,
+    images: finalImages,
     category: body.category || "",
     aisle: body.aisle || "",
     subcategory: body.subcategory || "",
@@ -894,7 +901,20 @@ apiRouter.post("/admin/products/contingency-batch", (req, res) => {
 });
 
 apiRouter.patch("/products/:id", (req, res) => {
-  const updated = dbManager.updateProduct(Number(req.params.id), req.body);
+  const body = req.body;
+  if (Array.isArray(body.images)) {
+    const rawImages = (body.images as string[]).map((s) => String(s || "").trim()).filter(Boolean);
+    body.images = rawImages;
+    if (!body.image && rawImages.length > 0) {
+      body.image = rawImages[0];
+    }
+  } else if (body.image) {
+    const existing = dbManager.getProducts().find((p) => p.id === Number(req.params.id));
+    if (!existing?.images || existing.images.length === 0) {
+      body.images = [body.image];
+    }
+  }
+  const updated = dbManager.updateProduct(Number(req.params.id), body);
   if (!updated) {
     res.status(404).json({ error: "Product not found" });
     return;
@@ -1195,6 +1215,7 @@ apiRouter.post("/admin/import-excel", async (req, res) => {
         description,
         price,
         image: finalImageUrl,
+        images: [finalImageUrl],
         category,
         aisle,
         subcategory,

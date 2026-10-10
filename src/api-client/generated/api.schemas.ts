@@ -14,6 +14,7 @@ export interface Product {
   name: string;
   price: number;
   image: string;
+  images?: string[];
   category: string;
   aisle: string;
   subcategory: string;
@@ -28,12 +29,14 @@ export interface Product {
   hidden: boolean;
   transferenciaEnabled: boolean;
   transferenciaAmount: number;
+  contingencyEnabled?: boolean;
 }
 
 export interface ProductInput {
   name?: string;
   price?: number;
   image?: string;
+  images?: string[];
   category?: string;
   aisle?: string;
   subcategory?: string;

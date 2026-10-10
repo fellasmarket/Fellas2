@@ -139,6 +139,7 @@ export interface Product {
   description?: string;
   price: number;
   image: string;
+  images?: string[];
   category: string;
   aisle: string;
   subcategory: string;

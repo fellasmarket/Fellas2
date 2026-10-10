@@ -337,6 +337,7 @@ const DEFAULT_FORM = {
   name: "",
   price: "",
   image: "",
+  images: [] as string[],
   category: "",
   aisle: "",
   subcategory: "",
@@ -685,6 +686,9 @@ export default function Storefront() {
   const [optionModalInfo, setOptionModalInfo] = useState<
     { product: Product; selectedOption: string } | null
   >(null);
+  const [viewingProductGallery, setViewingProductGallery] = useState<
+    { product: Product; activeIndex: number } | null
+  >(null);
   const [adminTab, setAdminTab] =
     useState<"products" | "recommended" | "collections" | "banners" | "media" | "classifications" | "orders" | "stats" | "settings" | "social" | "customers" | "contingency">("products");
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
@@ -873,6 +877,7 @@ export default function Storefront() {
   const [usernameInput, setUsernameInput] = useState("");
 
   const [formState, setFormState] = useState(DEFAULT_FORM);
+  const [productImageUrlInput, setProductImageUrlInput] = useState("");
   const [settingsDraft, setSettingsDraft] = useState<Settings>(settings);
   const [activeSlide, setActiveSlide] = useState(0);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
@@ -936,11 +941,7 @@ export default function Storefront() {
     return () => clearInterval(timer);
   }, [effectiveSlides.length]);
 
-  useEffect(() => {
-    if (categories.length > 0 && (!activeCategory || !categories.includes(activeCategory))) {
-      setActiveCategory(categories[0]);
-    }
-  }, [categories, activeCategory]);
+  // Se eliminó la selección automática de categoría inicial para permitir la vista limpia de catálogo y pasillos
 
   useEffect(() => {
     if (!menu) return;
@@ -1129,24 +1130,25 @@ export default function Storefront() {
   }, [cart, promoProducts, baseProducts]);
 
   const allMenuSections = useMemo(() => {
-    const list: Array<{ name: string; type: "category" | "aisle" }> = [];
-    categories.forEach((c) => list.push({ name: c, type: "category" }));
+    // En la vista de cliente, en el menú plegable de la izquierda deben verse ÚNICAMENTE los pasillos (no categorías ni subcategorías)
+    const list: Array<{ name: string; type: "aisle" }> = [];
     allStoreAisles.forEach((a) => {
-      if (!list.some((item) => item.name.toLowerCase() === a.toLowerCase())) {
-        list.push({ name: a, type: "aisle" });
+      const cleanName = a ? a.trim() : "";
+      if (cleanName && !list.some((item) => item.name.toLowerCase() === cleanName.toLowerCase())) {
+        list.push({ name: cleanName, type: "aisle" });
       }
     });
 
-    // Filter out empty categories or aisles, and exclude "oportunidades" and "packs" from navigation menu
+    // Filtrar pasillos sin productos y excluir "oportunidades" y "packs" del menú de pasillos
     return list.filter((item) => {
       const lower = item.name.toLowerCase();
       if (lower.includes("oportunidad") || lower.includes("pack")) return false;
-      const count = baseProducts.filter((p) =>
-        item.type === "category" ? p.category === item.name : p.aisle === item.name
+      const count = baseProducts.filter(
+        (p) => (p.aisle || "").trim().toLowerCase() === item.name.toLowerCase()
       ).length;
       return count > 0;
     });
-  }, [categories, allStoreAisles, baseProducts]);
+  }, [allStoreAisles, baseProducts]);
 
   const filteredProducts = useMemo(() => {
     if (debouncedSearch && debouncedSearch.trim().length > 0) {
@@ -1755,6 +1757,58 @@ export default function Storefront() {
     }
   };
 
+  const handleMultipleImageUpload = async (
+    e: ChangeEvent<HTMLInputElement>,
+    onAddUrls: (urls: string[]) => void,
+    options: { skipCompression?: boolean } = {},
+  ) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    try {
+      showToast(`Subiendo ${files.length} foto${files.length > 1 ? "s" : ""}...`);
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const uploadedUrls: string[] = [];
+      for (const file of files) {
+        try {
+          const compressed: Blob = options.skipCompression ? file : await compressImage(file);
+          const ext = compressed.type === "image/webp" ? "webp" : "jpg";
+          const uploadName = file.name.replace(/\.[^.]+$/, "") + "." + ext;
+          const presignRes = await fetch(`${apiBase}/storage/uploads/request-url`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: uploadName,
+              size: compressed.size,
+              contentType: compressed.type,
+            }),
+          });
+          if (!presignRes.ok) continue;
+          const { uploadURL, objectPath } = await presignRes.json();
+          const putRes = await fetch(uploadURL, {
+            method: "PUT",
+            headers: { "Content-Type": compressed.type },
+            body: compressed,
+          });
+          if (!putRes.ok) continue;
+          uploadedUrls.push(`${apiBase}/storage${objectPath}`);
+        } catch (innerErr) {
+          console.error("Error al subir archivo individual:", innerErr);
+        }
+      }
+      if (uploadedUrls.length > 0) {
+        onAddUrls(uploadedUrls);
+        showToast(`${uploadedUrls.length} foto${uploadedUrls.length > 1 ? "s subidas" : " subida"} correctamente ✓`);
+      } else {
+        showToast("Error al subir fotos");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Error al procesar subida de fotos");
+    } finally {
+      if (e.target) e.target.value = "";
+    }
+  };
+
   const resolveImageUrl = async (
     url: string,
     setFn: (resolved: string) => void,
@@ -2064,10 +2118,17 @@ export default function Storefront() {
     setShowAddProductModal(false);
     setOpenProductFormSections({ main: true, media: false, extras: false });
     setProductFormSubTab("main");
+    const productImages = (
+      Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : (product.image ? [product.image] : [])
+    ).filter(Boolean);
+
     setFormState({
       name: product.name,
       price: String(product.price),
-      image: product.image,
+      image: productImages[0] || product.image || "",
+      images: productImages,
       category: product.category,
       aisle: product.aisle,
       subcategory: product.subcategory || "",
@@ -2280,7 +2341,16 @@ export default function Storefront() {
       showToast("Por favor selecciona una categoría y un pasillo.");
       return;
     }
-    const finalImage = await resolveImageForSave(formState.image);
+    const currentImages = Array.isArray(formState.images) ? formState.images.filter(Boolean) : [];
+    if (formState.image && !currentImages.includes(formState.image)) {
+      currentImages.unshift(formState.image);
+    }
+    const resolvedImages = await Promise.all(
+      currentImages.map((img) => resolveImageForSave(img))
+    );
+    const validImages = resolvedImages.filter(Boolean);
+    const finalImage = validImages[0] || (await resolveImageForSave(formState.image)) || "";
+
     const parsedOptions = formState.optionsString
       .split(",")
       .map((s) => s.trim())
@@ -2294,6 +2364,7 @@ export default function Storefront() {
       optionsTitle: formState.optionsTitle || "",
       options: parsedOptions,
       image: finalImage || "",
+      images: validImages,
       oferta: formState.oferta,
       depositoEnabled: formState.depositoEnabled,
       depositoAmount: parseInt(formState.depositoAmount) || 500,
@@ -2570,20 +2641,17 @@ export default function Storefront() {
                   <span className="text-[10px] opacity-75">{baseProducts.length}</span>
                 </button>
                 {allMenuSections.map((sec) => {
-                  const isActive = sec.type === "category" ? activeCategory === sec.name : activeAisle === sec.name;
-                  const count = baseProducts.filter((p) => (sec.type === "category" ? p.category === sec.name : p.aisle === sec.name)).length;
+                  const isActive = activeAisle === sec.name;
+                  const count = baseProducts.filter(
+                    (p) => (p.aisle || "").trim().toLowerCase() === sec.name.toLowerCase()
+                  ).length;
                   return (
                     <button
                       key={sec.name}
                       onClick={() => {
                         setNavQuickFilter("");
-                        if (sec.type === "category") {
-                          setActiveAisle("");
-                          setActiveCategory(sec.name);
-                        } else {
-                          setActiveCategory("");
-                          setActiveAisle(sec.name);
-                        }
+                        setActiveCategory("");
+                        setActiveAisle(sec.name);
                         setShowDedicatedProductsPage(true);
                         setDedicatedViewMode("pasillo");
                         setMobileNavDrawerOpen(false);
@@ -2660,8 +2728,8 @@ export default function Storefront() {
                   className={`p-2 sm:p-2.5 rounded-xl transition-all cursor-pointer ${
                     showAisleMenu ? "bg-white/15 text-[#ffd129]" : "text-white hover:text-[#ffd129] hover:bg-white/10"
                   }`}
-                  title="Abrir menú de pasillos y categorías"
-                  aria-label="Abrir menú"
+                  title="Abrir menú de pasillos"
+                  aria-label="Abrir menú de pasillos"
                 >
                   <Menu size={22} className="shrink-0" />
                 </button>
@@ -2868,13 +2936,10 @@ export default function Storefront() {
               </div>
 
               {allMenuSections.map((item) => {
-                const isActive =
-                  item.type === "category"
-                    ? activeCategory === item.name
-                    : activeAisle === item.name;
+                const isActive = activeAisle === item.name;
 
-                const count = baseProducts.filter((p) =>
-                  item.type === "category" ? p.category === item.name : p.aisle === item.name
+                const count = baseProducts.filter(
+                  (p) => (p.aisle || "").trim().toLowerCase() === item.name.toLowerCase()
                 ).length;
 
                 return (
@@ -2883,13 +2948,8 @@ export default function Storefront() {
                     type="button"
                     onClick={() => {
                       setNavQuickFilter("");
-                      if (item.type === "category") {
-                        setActiveAisle("");
-                        setActiveCategory(item.name);
-                      } else {
-                        setActiveCategory("");
-                        setActiveAisle(item.name);
-                      }
+                      setActiveCategory("");
+                      setActiveAisle(item.name);
                       setShowDedicatedProductsPage(true);
                       setDedicatedViewMode("pasillo");
                       setShowAisleMenu(false);
@@ -3767,6 +3827,160 @@ export default function Storefront() {
             </div>
           )}
 
+          {/* MODAL VISOR DE MÚLTIPLES FOTOS DEL PRODUCTO */}
+          {viewingProductGallery && (
+            <div className="fixed inset-0 z-[220] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+              <div
+                className="absolute inset-0 bg-black/85 backdrop-blur-md"
+                onClick={() => setViewingProductGallery(null)}
+              />
+              <div className="relative w-full max-w-md sm:max-w-lg bg-[#141414] border border-white/15 rounded-3xl p-4 sm:p-6 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+                {/* Header with Title & Close button */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] font-bold text-[#ffd025] uppercase tracking-wider block truncate">
+                      {viewingProductGallery.product.aisle || viewingProductGallery.product.category}
+                    </span>
+                    <h3 className="text-sm sm:text-base font-black text-white leading-tight truncate">
+                      {viewingProductGallery.product.name}
+                    </h3>
+                    <p className="text-sm sm:text-base font-black text-[#ffd025] mt-0.5">
+                      ${Number(viewingProductGallery.product.price || 0).toLocaleString("es-CL")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewingProductGallery(null)}
+                    className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white transition cursor-pointer shrink-0"
+                    title="Cerrar"
+                    aria-label="Cerrar visor"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Main Image View with Prev/Next buttons */}
+                {(() => {
+                  const prod = viewingProductGallery.product;
+                  const imgs = (
+                    Array.isArray(prod.images) && prod.images.length > 0
+                      ? prod.images
+                      : (prod.image ? [prod.image] : [])
+                  ).filter(Boolean);
+                  const currIdx = Math.min(Math.max(0, viewingProductGallery.activeIndex), Math.max(0, imgs.length - 1));
+                  const currentUrl = imgs[currIdx] || prod.image;
+
+                  return (
+                    <div className="flex-1 flex flex-col min-h-0 space-y-3">
+                      <div
+                        onTouchStart={(e) => {
+                          const touch = e.touches[0];
+                          (e.currentTarget as any)._startX = touch.clientX;
+                        }}
+                        onTouchEnd={(e) => {
+                          const startX = (e.currentTarget as any)._startX;
+                          if (startX !== undefined && imgs.length > 1) {
+                            const endX = e.changedTouches[0].clientX;
+                            const diff = startX - endX;
+                            if (Math.abs(diff) > 40) {
+                              if (diff > 0) {
+                                const next = (currIdx + 1) % imgs.length;
+                                setViewingProductGallery({ product: prod, activeIndex: next });
+                              } else {
+                                const prev = (currIdx - 1 + imgs.length) % imgs.length;
+                                setViewingProductGallery({ product: prod, activeIndex: prev });
+                              }
+                            }
+                          }
+                        }}
+                        className="relative w-full aspect-square max-h-[48vh] bg-[#0d0d12] rounded-2xl overflow-hidden border border-white/10 flex items-center justify-center group select-none"
+                      >
+                        {currentUrl ? (
+                          <img
+                            src={currentUrl}
+                            alt={prod.name}
+                            className="w-full h-full object-contain p-2 transition-transform duration-200"
+                          />
+                        ) : (
+                          <Package size={48} className="text-gray-600" />
+                        )}
+
+                        {/* Prev / Next controls if multiple images */}
+                        {imgs.length > 1 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const prev = (currIdx - 1 + imgs.length) % imgs.length;
+                                setViewingProductGallery({ product: prod, activeIndex: prev });
+                              }}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/70 hover:bg-black text-white transition cursor-pointer shadow-lg"
+                              title="Foto anterior"
+                            >
+                              <ChevronLeft size={18} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const next = (currIdx + 1) % imgs.length;
+                                setViewingProductGallery({ product: prod, activeIndex: next });
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/70 hover:bg-black text-white transition cursor-pointer shadow-lg"
+                              title="Siguiente foto"
+                            >
+                              <ChevronRight size={18} />
+                            </button>
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-black/75 text-white text-[10px] font-mono font-bold">
+                              {currIdx + 1} / {imgs.length}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Thumbnail selector strip if multiple images */}
+                      {imgs.length > 1 && (
+                        <div className="flex items-center gap-2 overflow-x-auto py-1 custom-admin-scrollbar">
+                          {imgs.map((imgUrl, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setViewingProductGallery({ product: prod, activeIndex: idx })}
+                              className={`relative w-12 h-12 rounded-xl overflow-hidden bg-black/50 border-2 shrink-0 transition cursor-pointer ${
+                                currIdx === idx ? "border-[#ffd025] scale-105" : "border-white/10 hover:border-white/30 opacity-70 hover:opacity-100"
+                              }`}
+                            >
+                              <img src={imgUrl} alt="" className="w-full h-full object-contain p-0.5" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="pt-2 flex items-center justify-between gap-3 border-t border-white/10">
+                        <span className="text-xs text-gray-400 truncate">
+                          {prod.subcategory ? `Subcategoría: ${prod.subcategory}` : ""}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleAddToCartClick(prod);
+                            setViewingProductGallery(null);
+                          }}
+                          disabled={!isStoreOpen}
+                          className="px-4 py-2 bg-[#ffd129] hover:bg-[#e5bc24] text-[#141414] font-black text-xs uppercase rounded-xl transition flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-40"
+                        >
+                          <Plus size={14} /> Añadir al carrito
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* RENDERIZADO CONDICIONAL: 1. BÚSQUEDA EXCLUSIVA (PRIORIDAD MÁXIMA) vs 2. PESTAÑA DEDICADA vs 3. HOME */}
           {searchQuery.trim().length > 0 ? (
             /* VISTA EXCLUSIVA DE RESULTADOS DE BÚSQUEDA (Sin Colecciones, Sin Recomendados, Sin Banners) */
@@ -3826,7 +4040,11 @@ export default function Storefront() {
                       className="group flex flex-col justify-between h-full w-full"
                     >
                       <div>
-                        <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
+                        <div
+                          onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                          className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60 cursor-pointer"
+                          title="Ver fotos del producto"
+                        >
                           {product.image ? (
                             <img
                               src={product.image}
@@ -3843,6 +4061,13 @@ export default function Storefront() {
                             <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
                               <Package size={20} className="text-[#ffd129]" />
                               <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
+                            </div>
+                          )}
+
+                          {Array.isArray(product.images) && product.images.length > 1 && (
+                            <div className="absolute bottom-1 right-1 z-10 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-xs text-white text-[8px] font-bold flex items-center gap-1 border border-white/10 shadow-xs pointer-events-none">
+                              <Camera size={10} className="text-[#ffd129]" />
+                              <span>{product.images.length}</span>
                             </div>
                           )}
 
@@ -3869,7 +4094,8 @@ export default function Storefront() {
 
                         <h4
                           title={product.name}
-                          className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
+                          onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                          className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd129] transition-colors cursor-pointer"
                         >
                           {product.name}
                         </h4>
@@ -4205,7 +4431,11 @@ export default function Storefront() {
                                 className="group flex flex-col justify-between h-full w-full"
                               >
                                 <div>
-                                  <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
+                                  <div
+                                    onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                                    className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60 cursor-pointer"
+                                    title="Ver fotos del producto"
+                                  >
                                     {product.image ? (
                                       <img
                                         src={product.image}
@@ -4222,6 +4452,13 @@ export default function Storefront() {
                                       <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
                                         <Package size={20} className="text-[#ffd129]" />
                                         <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
+                                      </div>
+                                    )}
+
+                                    {Array.isArray(product.images) && product.images.length > 1 && (
+                                      <div className="absolute bottom-1 right-1 z-10 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-xs text-white text-[8px] font-bold flex items-center gap-1 border border-white/10 shadow-xs pointer-events-none">
+                                        <Camera size={10} className="text-[#ffd129]" />
+                                        <span>{product.images.length}</span>
                                       </div>
                                     )}
 
@@ -4248,7 +4485,8 @@ export default function Storefront() {
 
                                   <h4
                                     title={product.name}
-                                    className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
+                                    onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                                    className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd129] transition-colors cursor-pointer"
                                   >
                                     {product.name}
                                   </h4>
@@ -4403,7 +4641,11 @@ export default function Storefront() {
                                   className="group flex flex-col justify-between h-full w-full"
                                 >
                                   <div>
-                                    <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
+                                    <div
+                                      onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                                      className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60 cursor-pointer"
+                                      title="Ver fotos del producto"
+                                    >
                                       {product.image ? (
                                         <img
                                           src={product.image}
@@ -4420,6 +4662,13 @@ export default function Storefront() {
                                         <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
                                           <Package size={20} className="text-[#ffd129]" />
                                           <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
+                                        </div>
+                                      )}
+
+                                      {Array.isArray(product.images) && product.images.length > 1 && (
+                                        <div className="absolute bottom-1 right-1 z-10 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-xs text-white text-[8px] font-bold flex items-center gap-1 border border-white/10 shadow-xs pointer-events-none">
+                                          <Camera size={10} className="text-[#ffd129]" />
+                                          <span>{product.images.length}</span>
                                         </div>
                                       )}
 
@@ -4444,7 +4693,8 @@ export default function Storefront() {
 
                                     <h4
                                       title={product.name}
-                                      className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
+                                      onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                                      className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd129] transition-colors cursor-pointer"
                                     >
                                       {product.name}
                                     </h4>
@@ -4519,7 +4769,11 @@ export default function Storefront() {
                             className="group flex flex-col justify-between h-full w-full"
                           >
                             <div>
-                              <div className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60">
+                              <div
+                                onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                                className="relative w-full aspect-square overflow-hidden bg-neutral-100 mb-1.5 sm:mb-2 border border-neutral-200/60 cursor-pointer"
+                                title="Ver fotos del producto"
+                              >
                                 {product.image ? (
                                   <img
                                     src={product.image}
@@ -4536,6 +4790,13 @@ export default function Storefront() {
                                   <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-neutral-100 rounded-none">
                                     <Package size={20} className="text-[#ffd129]" />
                                     <span className="text-[8px] sm:text-[10px] mt-0.5 font-semibold uppercase text-neutral-500">Fellas</span>
+                                  </div>
+                                )}
+
+                                {Array.isArray(product.images) && product.images.length > 1 && (
+                                  <div className="absolute bottom-1 right-1 z-10 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-xs text-white text-[8px] font-bold flex items-center gap-1 border border-white/10 shadow-xs pointer-events-none">
+                                    <Camera size={10} className="text-[#ffd129]" />
+                                    <span>{product.images.length}</span>
                                   </div>
                                 )}
 
@@ -4562,7 +4823,8 @@ export default function Storefront() {
 
                               <h4
                                 title={product.name}
-                                className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#141414] transition-colors"
+                                onClick={() => setViewingProductGallery({ product, activeIndex: 0 })}
+                                className="text-[9.5px] xs:text-[10px] sm:text-[11.5px] md:text-[12px] font-semibold text-neutral-900 leading-tight line-clamp-2 h-7 sm:h-8 md:h-8.5 block w-full group-hover:text-[#ffd129] transition-colors cursor-pointer"
                               >
                                 {product.name}
                               </h4>
@@ -4709,33 +4971,25 @@ export default function Storefront() {
                     >
                       Todos
                     </button>
-                    {(aisles.length > 0 ? aisles : categories)
+                    {allStoreAisles
                       .filter((item) => {
                         const lower = item.toLowerCase();
                         if (lower.includes("oportunidad") || lower.includes("pack")) return false;
-                        const isAisle = aisles.includes(item);
                         const count = baseProducts.filter((p) =>
-                          isAisle ? p.aisle === item : p.category === item
+                          (p.aisle || "").trim().toLowerCase() === item.toLowerCase()
                         ).length;
                         return count > 0;
                       })
-                      .slice(0, 3)
+                      .slice(0, 4)
                       .map((item) => {
-                        const isAisleSelected = activeAisle === item;
-                        const isCategorySelected = activeCategory === item;
-                        const isSelected = isAisleSelected || isCategorySelected;
+                        const isSelected = activeAisle === item;
                         return (
                           <button
                             key={item}
                             onClick={() => {
                               setNavQuickFilter("");
-                              if (aisles.includes(item)) {
-                                setActiveCategory("");
-                                setActiveAisle(item);
-                              } else {
-                                setActiveAisle("");
-                                setActiveCategory(item);
-                              }
+                              setActiveCategory("");
+                              setActiveAisle(item);
                               window.scrollTo({ top: 0, behavior: "smooth" });
                             }}
                             className={`text-[9.5px] sm:text-[11px] uppercase tracking-wider transition-colors ${
@@ -11070,215 +11324,266 @@ export default function Storefront() {
                             }}
                             className="space-y-4 min-w-0 max-w-full overflow-hidden"
                           >
-                            {/* 1. SECCIÓN PRINCIPAL: CARGAR IMAGEN (A LA VISTA Y A LA MANO) */}
+                            {/* 1. SECCIÓN PRINCIPAL: CARGAR MÚLTIPLES IMÁGENES DEL PRODUCTO */}
                             <div className="rounded-2xl bg-gradient-to-br from-[#1b1b2d] via-[#161626] to-[#12121e] border-2 border-[#ffd025]/50 p-4 sm:p-5 shadow-xl space-y-3 min-w-0 max-w-full overflow-hidden">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#ffd025] flex items-center gap-1.5">
-                                    <Upload size={16} className="text-[#ffd025]" />
-                                    Cargar Imagen del Producto
+                                    <Camera size={16} className="text-[#ffd025]" />
+                                    Fotos del Producto (Múltiples Imágenes)
                                   </span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${formState.image ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-amber-500/20 text-amber-300 border border-amber-500/30"}`}>
-                                    {formState.image ? "✓ Foto Asignada" : "⚠️ Sin Foto"}
+                                  <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                                    (formState.images || []).length > 0
+                                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                      : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  }`}>
+                                    {(formState.images || []).length > 0
+                                      ? `✓ ${(formState.images || []).length} Foto${(formState.images || []).length > 1 ? "s" : ""}`
+                                      : "⚠️ Sin Foto"}
                                   </span>
                                 </div>
                                 <span className="text-[11px] text-gray-400 hidden sm:inline">
-                                  Acceso rápido e inmediato
+                                  La 1ª foto es la portada principal
                                 </span>
                               </div>
 
-                              <div className="flex flex-col sm:flex-row gap-4 items-start min-w-0 max-w-full">
-                                {/* Vista previa grande */}
-                                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#0a0a10] border-2 border-white/15 flex items-center justify-center overflow-hidden shrink-0 shadow-inner group">
-                                  {formState.image ? (
-                                    <>
-                                      <img
-                                        src={formState.image}
-                                        alt="Preview"
-                                        className="w-full h-full object-contain p-1.5 group-hover:scale-105 transition-transform"
-                                        onError={(e) => {
-                                          (e.currentTarget as HTMLImageElement).src =
-                                            "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
-                                        }}
-                                      />
-                                      <button
-                                        type="button"
-                                        title="Quitar foto"
-                                        onClick={() => {
-                                          if (formState.image.includes("/storage/objects/")) {
-                                            handleDeleteStorageImage(formState.image, () =>
-                                              setFormState({ ...formState, image: "" }),
-                                            );
-                                          } else {
-                                            setFormState({ ...formState, image: "" });
-                                          }
-                                        }}
-                                        className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-red-400 text-[10px] font-bold transition-opacity cursor-pointer"
-                                      >
-                                        <Trash2 size={16} />
-                                        <span>Quitar</span>
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <div className="text-center p-2 text-gray-500 flex flex-col items-center">
-                                      <Package size={26} className="text-[#ffd025]/50 mb-1" />
-                                      <span className="text-[9px] uppercase font-bold text-gray-400">Sin Foto</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Botón Subir Archivo + Input URL */}
-                                <div className="flex-1 min-w-0 w-full max-w-full space-y-2.5 overflow-hidden">
-                                  <div className="flex flex-wrap gap-2 items-center min-w-0 max-w-full">
-                                    <label className="cursor-pointer flex-1 sm:flex-none px-4 py-2.5 bg-[#ffd025] hover:bg-[#ffe066] text-[#0a0a0f] rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-md shadow-[#ffd025]/20 shrink-0">
-                                      <Upload size={15} strokeWidth={2.5} />
-                                      <span>SUBIR FOTO DESDE TU DISPOSITIVO</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) =>
-                                          handleImageUpload(e, (url) => setFormState({ ...formState, image: url }))
-                                        }
-                                      />
-                                    </label>
-
+                              {/* Tira de fotos asignadas actualmente */}
+                              {(formState.images || []).length > 0 ? (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-gray-300 font-bold">
+                                      Fotos añadidas ({formState.images.length}):
+                                    </span>
                                     <button
                                       type="button"
-                                      onClick={() => setMediaPickerOpen(true)}
-                                      className="cursor-pointer flex-1 sm:flex-none px-4 py-2.5 bg-white/10 hover:bg-[#ffd025] hover:text-[#0a0a0f] text-gray-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 border border-white/15 shadow-sm shrink-0"
+                                      onClick={() => setFormState({ ...formState, images: [], image: "" })}
+                                      className="text-red-400 hover:text-red-300 text-[10px] font-bold hover:underline cursor-pointer"
                                     >
-                                      <FolderOpen size={15} />
-                                      <span>ELEGIR DEL ARCHIVO / GALERÍA</span>
+                                      Quitar todas
                                     </button>
-
-                                    {formState.image && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (formState.image.includes("/storage/objects/")) {
-                                            handleDeleteStorageImage(formState.image, () =>
-                                              setFormState({ ...formState, image: "" }),
-                                            );
-                                          } else {
-                                            setFormState({ ...formState, image: "" });
-                                          }
-                                        }}
-                                        className="px-3 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
-                                      >
-                                        <Trash2 size={13} />
-                                        <span>Quitar</span>
-                                      </button>
-                                    )}
                                   </div>
 
-                                  <div className="flex gap-2 min-w-0 max-w-full">
-                                    <input
-                                      type="text"
-                                      placeholder="O escribe / pega el link web de la imagen (https://...)"
-                                      value={formState.image.includes("/storage/objects/") ? "" : formState.image}
-                                      onChange={(e) => setFormState({ ...formState, image: e.target.value })}
-                                      onBlur={(e) =>
-                                        resolveImageUrl(e.target.value, (resolved) =>
-                                          setFormState((prev) => ({ ...prev, image: resolved })),
-                                        )
-                                      }
-                                      className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
-                                    />
-                                  </div>
-
-                                  {/* Carrusel / Tira rápida de fotos del archivo dentro de la misma tarjeta */}
-                                  {(() => {
-                                    const availableQuickImages = quickMediaImages.filter((img) => {
-                                      if (formState.image) {
-                                        const cleanCur = String(formState.image).trim().toLowerCase();
-                                        const cleanUrl = String(img.url).trim().toLowerCase();
-                                        const cleanId = String(img.id).trim().toLowerCase();
-                                        if (cleanCur === cleanUrl || cleanCur === cleanId || cleanCur.includes(cleanId)) return true;
-                                      }
-                                      return !products.some((p) => {
-                                        if (editingProduct && p.id === editingProduct) return false;
-                                        if (!p.image) return false;
-                                        const pImg = String(p.image).trim().toLowerCase();
-                                        const imgUrl = String(img.url).trim().toLowerCase();
-                                        const imgId = String(img.id).trim().toLowerCase();
-                                        const imgName = String(img.name).trim().toLowerCase();
-                                        return pImg === imgUrl || pImg === imgId || pImg.includes(imgId) || pImg === imgName || pImg.endsWith("/" + imgId);
-                                      });
-                                    });
-
-                                    if (availableQuickImages.length === 0 && quickMediaImages.length === 0) return null;
-
-                                    return (
-                                      <div className="pt-2.5 border-t border-white/10 space-y-1.5 min-w-0 w-full max-w-full overflow-hidden">
-                                        <div className="flex items-center justify-between min-w-0 max-w-full">
-                                          <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5 truncate">
-                                            <FolderOpen size={12} className="text-[#ffd025] shrink-0" />
-                                            <span className="truncate">Fotos Disponibles ({availableQuickImages.length}) — Clic para asignar:</span>
-                                          </span>
-                                          <button
-                                            type="button"
-                                            onClick={() => setMediaPickerOpen(true)}
-                                            className="text-[10px] text-[#ffd025] hover:text-[#ffe066] font-bold flex items-center gap-1 cursor-pointer transition hover:underline shrink-0 ml-2"
-                                          >
-                                            <span>Pantalla Completa</span>
-                                            <ExternalLink size={10} />
-                                          </button>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 overflow-x-auto pb-1.5 custom-admin-scrollbar min-w-0 w-full max-w-full scroll-smooth">
-                                          {availableQuickImages.slice(0, 25).map((img) => {
-                                            const isSelected = formState.image === img.url;
-                                            return (
-                                              <button
-                                                key={img.id}
-                                                type="button"
-                                                onClick={() => {
-                                                  setFormState((prev) => ({ ...prev, image: img.url }));
-                                                  showToast("Foto asignada desde la galería");
-                                                }}
-                                                title={img.name}
-                                                className={`relative w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black/60 border-2 shrink-0 transition-all cursor-pointer group ${
-                                                  isSelected
-                                                    ? "border-[#ffd025] ring-2 ring-[#ffd025]/50 scale-105 shadow-md shadow-[#ffd025]/20"
-                                                    : "border-white/15 hover:border-[#ffd025]"
-                                                }`}
-                                              >
-                                                <img
-                                                  src={img.url}
-                                                  alt={img.name}
-                                                  className="w-full h-full object-contain p-1"
-                                                  loading="lazy"
-                                                  onError={(e) => {
-                                                    (e.currentTarget as HTMLImageElement).src =
-                                                      "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
-                                                  }}
-                                                />
-                                                {isSelected && (
-                                                  <div className="absolute inset-0 bg-[#ffd025]/30 flex items-center justify-center">
-                                                    <div className="w-4 h-4 rounded-full bg-[#ffd025] text-black flex items-center justify-center shadow-md">
-                                                      <Check size={11} strokeWidth={3} />
-                                                    </div>
-                                                  </div>
-                                                )}
-                                              </button>
-                                            );
-                                          })}
+                                  <div className="flex items-center gap-2.5 overflow-x-auto pb-2 custom-admin-scrollbar">
+                                    {formState.images.map((imgUrl, idx) => {
+                                      const isPrimary = idx === 0;
+                                      return (
+                                        <div
+                                          key={`${imgUrl}-${idx}`}
+                                          className={`relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-[#0a0a10] border-2 shrink-0 group shadow-md transition-all ${
+                                            isPrimary ? "border-[#ffd025] ring-2 ring-[#ffd025]/30" : "border-white/20 hover:border-white/50"
+                                          }`}
+                                        >
+                                          <img
+                                            src={imgUrl}
+                                            alt={`Foto ${idx + 1}`}
+                                            className="w-full h-full object-contain p-1"
+                                            onError={(e) => {
+                                              (e.currentTarget as HTMLImageElement).src =
+                                                "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                            }}
+                                          />
+                                          {isPrimary ? (
+                                            <span className="absolute top-1 left-1 px-1.5 py-0.5 bg-[#ffd025] text-black text-[8px] font-black uppercase rounded shadow-xs tracking-tight">
+                                              ★ Portada
+                                            </span>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const next = [imgUrl, ...formState.images.filter((_, i) => i !== idx)];
+                                                setFormState({ ...formState, images: next, image: next[0] });
+                                                showToast("Foto establecida como portada principal");
+                                              }}
+                                              className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 px-1.5 py-0.5 bg-black/80 hover:bg-[#ffd025] hover:text-black text-white text-[8px] font-bold rounded transition cursor-pointer"
+                                              title="Hacer foto principal"
+                                            >
+                                              ★ Portada
+                                            </button>
+                                          )}
 
                                           <button
                                             type="button"
-                                            onClick={() => setMediaPickerOpen(true)}
-                                            className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-white/20 hover:border-[#ffd025] text-gray-400 hover:text-[#ffd025] flex flex-col items-center justify-center gap-0.5 shrink-0 transition text-[9px] font-bold uppercase cursor-pointer bg-white/5"
-                                            title="Ver todas las fotos o subir nuevas"
+                                            onClick={() => {
+                                              const next = formState.images.filter((_, i) => i !== idx);
+                                              setFormState({ ...formState, images: next, image: next[0] || "" });
+                                            }}
+                                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 bg-red-600/90 text-white rounded-full hover:bg-red-700 transition cursor-pointer shadow-xs"
+                                            title="Eliminar esta foto"
                                           >
-                                            <FolderOpen size={13} />
-                                            <span>Más</span>
+                                            <Trash2 size={11} />
                                           </button>
                                         </div>
-                                      </div>
-                                    );
-                                  })()}
+                                      );
+                                    })}
+                                  </div>
                                 </div>
+                              ) : (
+                                <div className="text-center p-3 rounded-2xl bg-black/30 border border-white/5 text-gray-500 flex items-center justify-center gap-2">
+                                  <Package size={20} className="text-[#ffd025]/50" />
+                                  <span className="text-xs font-bold text-gray-400">Sin fotos asignadas aún a este producto</span>
+                                </div>
+                              )}
+
+                              {/* Botones de acción: Subir múltiples fotos o elegir de galería */}
+                              <div className="space-y-2 pt-1">
+                                <div className="flex flex-wrap gap-2 items-center min-w-0 max-w-full">
+                                  <label className="cursor-pointer flex-1 sm:flex-none px-4 py-2.5 bg-[#ffd025] hover:bg-[#ffe066] text-[#0a0a0f] rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-md shadow-[#ffd025]/20 shrink-0">
+                                    <Upload size={15} strokeWidth={2.5} />
+                                    <span>SUBIR FOTOS DESDE TU DISPOSITIVO</span>
+                                    <input
+                                      type="file"
+                                      multiple
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(e) =>
+                                        handleMultipleImageUpload(e, (urls) => {
+                                          setFormState((prev) => {
+                                            const existing = Array.isArray(prev.images) ? [...prev.images] : (prev.image ? [prev.image] : []);
+                                            const combined = [...existing, ...urls.filter((u) => !existing.includes(u))];
+                                            return { ...prev, images: combined, image: combined[0] || "" };
+                                          });
+                                        })
+                                      }
+                                    />
+                                  </label>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setMediaPickerOpen(true)}
+                                    className="cursor-pointer flex-1 sm:flex-none px-4 py-2.5 bg-white/10 hover:bg-[#ffd025] hover:text-[#0a0a0f] text-gray-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-2 border border-white/15 shadow-sm shrink-0"
+                                  >
+                                    <FolderOpen size={15} />
+                                    <span>ELEGIR DEL ARCHIVO / GALERÍA</span>
+                                  </button>
+                                </div>
+
+                                <div className="flex gap-2 min-w-0 max-w-full">
+                                  <input
+                                    type="text"
+                                    placeholder="O escribe / pega link web de foto (https://...)"
+                                    value={productImageUrlInput}
+                                    onChange={(e) => setProductImageUrlInput(e.target.value)}
+                                    className="w-full bg-[#12121d] border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-[#ffd025] focus:outline-none placeholder-gray-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!productImageUrlInput.trim()) return;
+                                      resolveImageUrl(productImageUrlInput.trim(), (resolved) => {
+                                        setFormState((prev) => {
+                                          const existing = Array.isArray(prev.images) ? [...prev.images] : (prev.image ? [prev.image] : []);
+                                          if (!existing.includes(resolved)) existing.push(resolved);
+                                          return { ...prev, images: existing, image: existing[0] || resolved };
+                                        });
+                                        setProductImageUrlInput("");
+                                        showToast("Foto añadida ✓");
+                                      });
+                                    }}
+                                    className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition cursor-pointer shrink-0"
+                                  >
+                                    Agregar
+                                  </button>
+                                </div>
+
+                                {/* Carrusel / Tira rápida de fotos del archivo dentro de la misma tarjeta */}
+                                {(() => {
+                                  const availableQuickImages = quickMediaImages.filter((img) => {
+                                    if (formState.images && formState.images.length > 0) {
+                                      const cleanUrl = String(img.url).trim().toLowerCase();
+                                      const cleanId = String(img.id).trim().toLowerCase();
+                                      if (formState.images.some((fi) => {
+                                        const c = String(fi).trim().toLowerCase();
+                                        return c === cleanUrl || c === cleanId || c.includes(cleanId);
+                                      })) return true;
+                                    }
+                                    return !products.some((p) => {
+                                      if (editingProduct && p.id === editingProduct) return false;
+                                      if (!p.image) return false;
+                                      const pImg = String(p.image).trim().toLowerCase();
+                                      const imgUrl = String(img.url).trim().toLowerCase();
+                                      const imgId = String(img.id).trim().toLowerCase();
+                                      const imgName = String(img.name).trim().toLowerCase();
+                                      return pImg === imgUrl || pImg === imgId || pImg.includes(imgId) || pImg === imgName || pImg.endsWith("/" + imgId);
+                                    });
+                                  });
+
+                                  if (availableQuickImages.length === 0 && quickMediaImages.length === 0) return null;
+
+                                  return (
+                                    <div className="pt-2.5 border-t border-white/10 space-y-1.5 min-w-0 w-full max-w-full overflow-hidden">
+                                      <div className="flex items-center justify-between min-w-0 max-w-full">
+                                        <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                                          <FolderOpen size={12} className="text-[#ffd025] shrink-0" />
+                                          <span className="truncate">Fotos Disponibles ({availableQuickImages.length}) — Clic para alternar:</span>
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setMediaPickerOpen(true)}
+                                          className="text-[10px] text-[#ffd025] hover:text-[#ffe066] font-bold flex items-center gap-1 cursor-pointer transition hover:underline shrink-0 ml-2"
+                                        >
+                                          <span>Pantalla Completa</span>
+                                          <ExternalLink size={10} />
+                                        </button>
+                                      </div>
+
+                                      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 custom-admin-scrollbar min-w-0 w-full max-w-full scroll-smooth">
+                                        {availableQuickImages.slice(0, 25).map((img) => {
+                                          const isSelected = (formState.images || []).includes(img.url);
+                                          return (
+                                            <button
+                                              key={img.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setFormState((prev) => {
+                                                  const existing = Array.isArray(prev.images) ? [...prev.images] : (prev.image ? [prev.image] : []);
+                                                  const next = isSelected
+                                                    ? existing.filter((u) => u !== img.url)
+                                                    : [...existing, img.url];
+                                                  return { ...prev, images: next, image: next[0] || "" };
+                                                });
+                                                showToast(isSelected ? "Foto removida" : "Foto añadida ✓");
+                                              }}
+                                              title={img.name}
+                                              className={`relative w-13 h-13 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black/60 border-2 shrink-0 transition-all cursor-pointer group ${
+                                                isSelected
+                                                  ? "border-[#ffd025] ring-2 ring-[#ffd025]/50 scale-105 shadow-md shadow-[#ffd025]/20"
+                                                  : "border-white/15 hover:border-[#ffd025]"
+                                              }`}
+                                            >
+                                              <img
+                                                src={img.url}
+                                                alt={img.name}
+                                                className="w-full h-full object-contain p-1"
+                                                loading="lazy"
+                                                onError={(e) => {
+                                                  (e.currentTarget as HTMLImageElement).src =
+                                                    "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
+                                                }}
+                                              />
+                                              {isSelected && (
+                                                <div className="absolute inset-0 bg-[#ffd025]/30 flex items-center justify-center">
+                                                  <div className="w-4 h-4 rounded-full bg-[#ffd025] text-black flex items-center justify-center shadow-md">
+                                                    <Check size={11} strokeWidth={3} />
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setMediaPickerOpen(true)}
+                                          className="w-13 h-13 sm:w-14 sm:h-14 rounded-xl border-2 border-dashed border-white/20 hover:border-[#ffd025] text-gray-400 hover:text-[#ffd025] flex flex-col items-center justify-center gap-0.5 shrink-0 transition text-[9px] font-bold uppercase cursor-pointer bg-white/5"
+                                          title="Ver todas las fotos o subir nuevas"
+                                        >
+                                          <FolderOpen size={13} />
+                                          <span>Más</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
 
@@ -11555,8 +11860,12 @@ export default function Storefront() {
                           }
                           currentImage={formState.image}
                           onSelectImage={(url) => {
-                            setFormState((prev) => ({ ...prev, image: url }));
-                            showToast("Foto seleccionada desde la galería");
+                            setFormState((prev) => {
+                              const existing = Array.isArray(prev.images) ? [...prev.images] : (prev.image ? [prev.image] : []);
+                              if (!existing.includes(url)) existing.push(url);
+                              return { ...prev, images: existing, image: existing[0] || url };
+                            });
+                            showToast("Foto añadida al producto ✓");
                             loadQuickMediaImages();
                           }}
                           title="Seleccionar Imagen para el Producto"
@@ -11927,6 +12236,13 @@ export default function Storefront() {
                                                     </span>
                                                   )}
                                                 </div>
+
+                                                {Array.isArray(product.images) && product.images.length > 1 && (
+                                                  <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-black/80 text-[#ffd025] text-[9px] font-mono font-bold border border-white/10 flex items-center gap-1 shadow-md">
+                                                    <Camera size={10} />
+                                                    {product.images.length} fotos
+                                                  </span>
+                                                )}
 
                                                 {/* Visibility badge */}
                                                 {product.hidden && (
