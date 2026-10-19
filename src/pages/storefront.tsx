@@ -741,6 +741,13 @@ export default function Storefront() {
 
   const trackVisitMut = useTrackVisit();
 
+  useEffect(() => {
+    if (!selectedLocation && deliveryLocations.length > 0) {
+      const activeLoc = deliveryLocations.find((l) => l.active) || deliveryLocations[0];
+      if (activeLoc) setSelectedLocation(activeLoc);
+    }
+  }, [deliveryLocations, selectedLocation]);
+
   // Keep-alive ping activo cada 30s para mantener el servidor despierto 24/7 en Render y evitar reinicios
   useEffect(() => {
     const pingServer = async () => {
@@ -1456,7 +1463,14 @@ export default function Storefront() {
 
   const deliveryMinimum = settings.deliveryMinimum ?? 10000;
   const hasLocations = deliveryLocations.length > 0;
-  const DELIVERY_COST = selectedLocation?.price ?? (hasLocations ? 0 : 3000);
+  const activeLocations = deliveryLocations.filter((l) => l.active);
+  const DELIVERY_COST =
+    selectedLocation?.price ??
+    (activeLocations.length > 0
+      ? activeLocations[0].price
+      : hasLocations
+      ? deliveryLocations[0].price
+      : 2000);
   const isDelivery = checkoutForm.deliveryType === "delivery";
   const orderTotal = cartTotal + (isDelivery ? DELIVERY_COST : 0);
   const discountSavings = appliedDiscount?.discountAmount ?? 0;
@@ -1908,11 +1922,15 @@ export default function Storefront() {
   const openCheckout = () => {
     if (cart.length === 0) return;
     if (customer) {
-      setCheckoutForm(f => ({
+      setCheckoutForm((f) => ({
         ...f,
         customerName: customer.name,
         phone: customer.phone ?? f.phone,
       }));
+    }
+    if (!selectedLocation && deliveryLocations.length > 0) {
+      const activeLoc = deliveryLocations.find((l) => l.active) || deliveryLocations[0];
+      if (activeLoc) setSelectedLocation(activeLoc);
     }
     setCheckoutStep(1);
     setCheckoutOpen(true);
@@ -1952,28 +1970,48 @@ export default function Storefront() {
       selectedOption: item.selectedOption ?? undefined,
     }));
 
-    const tipoEntrega = deliveryType === "delivery" ? "🛵 Delivery" : "🏪 Retiro en tienda";
-    let text = `¡Hola! Soy *${customerName}* y quiero hacer el siguiente pedido:\n\n`;
+    const isDeliveryOrder = deliveryType === "delivery";
+    const currentDeliveryCost = isDeliveryOrder ? DELIVERY_COST : 0;
+    const itemsSubtotal = cartTotal;
+    const finalOrderTotal = itemsSubtotal + currentDeliveryCost - discountSavings;
+
+    let text = `¡Hola! Soy *${customerName.trim()}* y quiero hacer el siguiente pedido:\n\n`;
+    text += `🛒 *DETALLE DEL PEDIDO:*\n`;
     cart.forEach((item) => {
       const optionText = item.selectedOption ? ` (${item.selectedOption})` : "";
-      text += `👉 ${item.quantity}x ${item.name}${optionText} - $${(
+      text += `👉 ${item.quantity}x ${item.name}${optionText} — $${(
         item.price * item.quantity
       ).toLocaleString("es-CL")}\n`;
     });
-    text += `\n📦 *Tipo de entrega:* ${tipoEntrega}`;
-    if (isDelivery && selectedLocation) {
-      text += ` — ${selectedLocation.name}`;
+
+    text += `\n📦 *TIPO DE ENTREGA:* ${isDeliveryOrder ? "🛵 Delivery a Domicilio" : "🏪 Retiro en Local"}`;
+    if (isDeliveryOrder && selectedLocation) {
+      text += ` (${selectedLocation.name})`;
     }
-    text += `\n📍 *Dirección:* ${address}`;
-    if (phone) text += `\n📞 *Teléfono:* ${phone}`;
-    if (notes) text += `\n📝 *Notas:* ${notes}`;
-    if (isDelivery) {
-      text += `\n\n🛵 *Costo delivery:* $${DELIVERY_COST.toLocaleString("es-CL")}`;
+    if (isDeliveryOrder && address.trim()) {
+      text += `\n📍 *Dirección:* ${address.trim()}`;
+    }
+    if (phone.trim()) {
+      text += `\n📞 *Teléfono:* ${phone.trim()}`;
+    }
+    if (notes.trim()) {
+      text += `\n📝 *Notas:* ${notes.trim()}`;
+    }
+
+    text += `\n\n──────── *DESGLOSE DE PAGO* ────────\n`;
+    text += `💵 *Subtotal productos:* $${itemsSubtotal.toLocaleString("es-CL")}\n`;
+    if (isDeliveryOrder) {
+      const zonaText = selectedLocation ? ` (${selectedLocation.name})` : "";
+      text += `🛵 *Costo de Delivery${zonaText}:* $${currentDeliveryCost.toLocaleString("es-CL")}\n`;
+    } else {
+      text += `🏪 *Delivery:* $0 (Retiro en local)\n`;
     }
     if (discountSavings > 0) {
-      text += `\n🏷️ *Descuento (${appliedDiscount?.code}):* -$${discountSavings.toLocaleString("es-CL")}`;
+      text += `🏷️ *Descuento (${appliedDiscount?.code || "Cupón"}):* -$${discountSavings.toLocaleString("es-CL")}\n`;
     }
-    text += `\n\n💰 *Total: $${finalTotal.toLocaleString("es-CL")}*\n\n¿Me confirmas?`;
+    text += `💰 *TOTAL A PAGAR: $${finalOrderTotal.toLocaleString("es-CL")}*\n`;
+    text += `────────────────────────────────────\n\n`;
+    text += `¿Me confirmas la recepción y los datos para transferir?`;
 
     // Abrir WhatsApp antes del await para que quede dentro del gesto del usuario.
     // Los navegadores móviles bloquean window.open() si se llama después de un await.
@@ -1990,21 +2028,23 @@ export default function Storefront() {
     setDiscountCode("");
     setCheckoutOpen(false);
     setIsCartOpen(false);
-    setCheckoutForm({ customerName: "", address: "", phone: "", notes: "", deliveryType: "retiro" });
+    setCheckoutForm({ customerName: "", address: "", phone: "", notes: "", deliveryType: "delivery" });
     showToast("Pedido enviado");
 
     try {
       await createOrderMut.mutateAsync({
         data: {
           customerName,
-          address,
+          address: isDeliveryOrder ? address : "Retiro en local",
           phone,
-          notes,
+          notes: isDeliveryOrder && currentDeliveryCost > 0
+            ? `${notes ? notes + " | " : ""}Delivery: $${currentDeliveryCost.toLocaleString("es-CL")}${selectedLocation ? " (" + selectedLocation.name + ")" : ""}`
+            : notes,
           items,
-          subtotal: discountSavings > 0 ? cartTotal : undefined,
+          subtotal: itemsSubtotal,
           discountCode: discountSavings > 0 ? (appliedDiscount?.code ?? undefined) : undefined,
           discountAmount: discountSavings > 0 ? discountSavings : undefined,
-          total: finalTotal,
+          total: finalOrderTotal,
           deliveryType,
         },
       });
@@ -5083,7 +5123,13 @@ export default function Storefront() {
                         <button
                           key={type}
                           type="button"
-                          onClick={() => setCheckoutForm({ ...checkoutForm, deliveryType: type })}
+                          onClick={() => {
+                            setCheckoutForm({ ...checkoutForm, deliveryType: type });
+                            if (type === "delivery" && !selectedLocation && deliveryLocations.length > 0) {
+                              const activeLoc = deliveryLocations.find((l) => l.active) || deliveryLocations[0];
+                              if (activeLoc) setSelectedLocation(activeLoc);
+                            }
+                          }}
                           className={`flex flex-col items-center justify-center gap-2 py-5 px-3 rounded-2xl border font-bold text-sm transition-all ${
                             checkoutForm.deliveryType === type
                               ? "bg-white/20 border-white/40 text-white"
