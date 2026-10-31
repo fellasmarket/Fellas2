@@ -7529,7 +7529,13 @@ export default function Storefront() {
                 </div>
               )}
 
-              {adminTab === "media" && <MediaAdminPanel onMediaDeleted={refreshMenu} />}
+              {adminTab === "media" && (
+                <MediaAdminPanel
+                  onMediaDeleted={refreshMenu}
+                  products={products}
+                  onProductUpdated={refreshMenu}
+                />
+              )}
               {adminTab === "orders" && <OrdersAdminPanel role={adminRole ?? "full"} />}
 
             {adminTab === "stats" && <StatsAdminPanel />}

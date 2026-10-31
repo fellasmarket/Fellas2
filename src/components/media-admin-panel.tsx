@@ -25,6 +25,12 @@ import {
   Bot,
   Zap,
   Droplets,
+  Star,
+  Plus,
+  X,
+  ShoppingBag,
+  CheckCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { uploadImagesBatch } from "../lib/image-batch-uploader";
 
@@ -38,8 +44,21 @@ export interface MediaItem {
   aiDetectedTitle?: string;
 }
 
+export interface MediaProduct {
+  id: number;
+  name: string;
+  price: number;
+  image?: string;
+  images?: string[];
+  category?: string;
+  aisle?: string;
+  subcategory?: string;
+}
+
 interface MediaAdminPanelProps {
   onMediaDeleted?: () => void;
+  products?: any[];
+  onProductUpdated?: () => void;
 }
 
 export const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -78,8 +97,287 @@ export const ORDERED_SECTIONS = [
   "Otros / General",
 ];
 
-export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted }) => {
+const normalizeText = (text: string) =>
+  (text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+interface ImageProductAssignerProps {
+  imageUrl: string;
+  imageName: string;
+  products: MediaProduct[];
+  onAssign: (imgUrl: string, productId: number, asPrimary: boolean) => Promise<void>;
+  onUnassign: (imgUrl: string, productId: number) => Promise<void>;
+  mode?: "card" | "modal";
+}
+
+export const ImageProductAssigner: React.FC<ImageProductAssignerProps> = ({
+  imageUrl,
+  imageName,
+  products,
+  onAssign,
+  onUnassign,
+  mode = "card",
+}) => {
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [assigningId, setAssigningId] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const assignedProducts = useMemo(() => {
+    if (!imageUrl) return [];
+    return products.filter((p) => {
+      if (p.image === imageUrl) return true;
+      if (Array.isArray(p.images) && p.images.includes(imageUrl)) return true;
+      return false;
+    });
+  }, [products, imageUrl]);
+
+  const matchingProducts = useMemo(() => {
+    const q = normalizeText(query);
+    if (!q) return [];
+    return products
+      .filter((p) => {
+        const n = normalizeText(p.name);
+        const c = normalizeText(p.category || "");
+        const a = normalizeText(p.aisle || "");
+        const s = normalizeText(p.subcategory || "");
+        return n.includes(q) || c.includes(q) || a.includes(q) || s.includes(q);
+      })
+      .slice(0, 10);
+  }, [products, query]);
+
+  const handleSelectProduct = async (p: MediaProduct, asPrimary: boolean, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setAssigningId(p.id);
+      await onAssign(imageUrl, p.id, asPrimary);
+      setQuery("");
+      setIsOpen(false);
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const handleRemoveProduct = async (productId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setAssigningId(productId);
+      await onUnassign(imageUrl, productId);
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className={`relative ${mode === "modal" ? "w-full" : "w-full mt-1.5"}`}>
+      {/* Badges de productos actualmente asignados */}
+      {assignedProducts.length > 0 ? (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {assignedProducts.map((p) => {
+            const isPrimary = p.image === imageUrl;
+            return (
+              <span
+                key={p.id}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#ffd025]/15 border border-[#ffd025]/30 text-[#ffd025] text-[9px] font-bold max-w-full"
+                title={`Asignada a ${p.name} ${isPrimary ? '(Foto Principal)' : '(Galería)'}`}
+              >
+                <Tag size={9} className="shrink-0" />
+                <span className="truncate max-w-[85px] sm:max-w-[100px]">{p.name}</span>
+                {isPrimary && (
+                  <span className="text-[7.5px] bg-[#ffd025] text-black px-1 rounded font-black shrink-0">
+                    1ª
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => handleRemoveProduct(p.id, e)}
+                  disabled={assigningId === p.id}
+                  className="hover:text-red-400 text-gray-400 p-0.5 transition cursor-pointer"
+                  title="Desvincular esta foto del producto"
+                >
+                  <X size={9} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      ) : (
+        mode === "card" && (
+          <p className="text-[8.5px] text-gray-500 mb-1 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-600 inline-block" /> Sin producto asignado
+          </p>
+        )
+      )}
+
+      {/* Barra de búsqueda predictiva */}
+      <div className="relative">
+        <div
+          className={`flex items-center gap-1.5 bg-[#0a0a12] border rounded-xl px-2.5 py-1.5 transition ${
+            isOpen
+              ? "border-[#ffd025] ring-1 ring-[#ffd025]/30"
+              : "border-white/10 hover:border-white/20"
+          }`}
+        >
+          <Search size={12} className="text-[#ffd025] shrink-0" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
+            placeholder={
+              mode === "modal"
+                ? "Escribe el nombre del producto para asignarle esta imagen..."
+                : "Asignar a producto (busca)..."
+            }
+            className="w-full bg-transparent text-white text-[10px] sm:text-[10.5px] placeholder-gray-500 focus:outline-none"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setIsOpen(false);
+              }}
+              className="text-gray-400 hover:text-white p-0.5 cursor-pointer"
+            >
+              <X size={11} />
+            </button>
+          )}
+        </div>
+
+        {/* Dropdown flotante predictivo con coincidencias */}
+        {isOpen && query.trim().length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#161628]/98 border border-[#ffd025]/50 rounded-2xl shadow-2xl p-1.5 max-h-60 overflow-y-auto backdrop-blur-xl space-y-1 animate-fade-in text-left">
+            <div className="px-2 py-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between border-b border-white/5 pb-1">
+              <span>Coincidencias ({matchingProducts.length})</span>
+              <span className="text-[#ffd025]">Selecciona acción</span>
+            </div>
+
+            {matchingProducts.length === 0 ? (
+              <div className="p-3 text-center text-gray-400 text-[10.5px]">
+                No hay productos que coincidan con &quot;{query}&quot;
+              </div>
+            ) : (
+              matchingProducts.map((p) => {
+                const isAssigned = p.image === imageUrl || (Array.isArray(p.images) && p.images.includes(imageUrl));
+                const isPrimary = p.image === imageUrl;
+                const isBusy = assigningId === p.id;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 transition border border-transparent hover:border-[#ffd025]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center shrink-0">
+                        {p.image ? (
+                          <img
+                            src={p.image}
+                            alt=""
+                            className="w-full h-full object-contain p-0.5"
+                          />
+                        ) : (
+                          <ShoppingBag size={14} className="text-gray-500" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-white truncate" title={p.name}>{p.name}</p>
+                        <div className="flex items-center gap-1.5 text-[9px] text-gray-400">
+                          <span className="text-[#ffd025] font-mono font-bold">
+                            ${(p.price || 0).toLocaleString("es-CL")}
+                          </span>
+                          <span>•</span>
+                          <span className="truncate">{p.aisle || p.category || "General"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
+                      {isAssigned ? (
+                        <div className="flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[8.5px] font-bold flex items-center gap-0.5">
+                            <Check size={10} /> Asignada
+                          </span>
+                          {!isPrimary && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={(e) => handleSelectProduct(p, true, e)}
+                              className="px-1.5 py-0.5 rounded bg-[#ffd025]/20 hover:bg-[#ffd025] text-[#ffd025] hover:text-black text-[8.5px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                              title="Establecer como foto principal"
+                            >
+                              <Star size={9} /> Principal
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={(e) => handleRemoveProduct(p.id, e)}
+                            className="px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white text-[8.5px] font-bold transition cursor-pointer"
+                            title="Desvincular esta foto del producto"
+                          >
+                            <X size={9} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={(e) => handleSelectProduct(p, true, e)}
+                            className="px-2 py-1 rounded-lg bg-[#ffd025] hover:bg-[#ffe066] text-black text-[9px] font-black uppercase tracking-wider transition flex items-center gap-1 cursor-pointer shadow"
+                            title="Establecer como foto principal del producto"
+                          >
+                            <Star size={10} />
+                            <span>Principal</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={(e) => handleSelectProduct(p, false, e)}
+                            className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[9px] font-bold transition flex items-center gap-1 cursor-pointer"
+                            title="Añadir a la galería de fotos del producto"
+                          >
+                            <Plus size={10} />
+                            <span>Galería</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({
+  onMediaDeleted,
+  products: propsProducts,
+  onProductUpdated,
+}) => {
   const [images, setImages] = useState<MediaItem[]>([]);
+  const [products, setProducts] = useState<MediaProduct[]>(propsProducts || []);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
@@ -90,7 +388,129 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
   const [previewImage, setPreviewImage] = useState<MediaItem | null>(null);
   const [classifyingAI, setClassifyingAI] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((cur) => (cur === msg ? null : cur));
+    }, 3200);
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const res = await fetch(`${apiBase}/products`);
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching products in MediaAdminPanel:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (propsProducts && propsProducts.length > 0) {
+      setProducts(propsProducts);
+    } else {
+      fetchProducts();
+    }
+  }, [propsProducts]);
+
+  const handleAssignImageToProduct = async (
+    imgUrl: string,
+    productId: number,
+    asPrimary: boolean
+  ) => {
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) return;
+
+    const currentImages = Array.isArray(prod.images) && prod.images.length > 0
+      ? prod.images
+      : (prod.image ? [prod.image] : []);
+
+    let newImages: string[];
+    let newPrimary: string;
+
+    if (asPrimary) {
+      newPrimary = imgUrl;
+      newImages = [imgUrl, ...currentImages.filter((u) => u !== imgUrl)];
+    } else {
+      newPrimary = prod.image || imgUrl;
+      newImages = currentImages.includes(imgUrl)
+        ? currentImages
+        : [...currentImages, imgUrl];
+    }
+
+    try {
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const res = await fetch(`${apiBase}/products/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: newPrimary,
+          images: newImages,
+        }),
+      });
+
+      if (res.ok) {
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === productId ? { ...p, image: newPrimary, images: newImages } : p
+          )
+        );
+        onProductUpdated?.();
+        showToast(
+          asPrimary
+            ? `✓ Foto principal asignada a "${prod.name}"`
+            : `✓ Foto añadida a la galería de "${prod.name}"`
+        );
+      } else {
+        alert("No se pudo asignar la imagen al producto.");
+      }
+    } catch (err) {
+      console.error("Error assigning image to product:", err);
+      alert("Error de conexión al asignar imagen.");
+    }
+  };
+
+  const handleUnassignImageFromProduct = async (imgUrl: string, productId: number) => {
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) return;
+
+    const currentImages = Array.isArray(prod.images) && prod.images.length > 0
+      ? prod.images
+      : (prod.image ? [prod.image] : []);
+
+    const newImages = currentImages.filter((u) => u !== imgUrl);
+    const newPrimary = prod.image === imgUrl ? (newImages[0] || "") : prod.image;
+
+    try {
+      const apiBase = `${import.meta.env.BASE_URL}api`;
+      const res = await fetch(`${apiBase}/products/${productId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: newPrimary,
+          images: newImages,
+        }),
+      });
+
+      if (res.ok) {
+        setProducts((prev) =>
+          prev.map((p) =>
+            p.id === productId ? { ...p, image: newPrimary, images: newImages } : p
+          )
+        );
+        onProductUpdated?.();
+        showToast(`Foto desvinculada de "${prod.name}"`);
+      }
+    } catch (err) {
+      console.error("Error unassigning image:", err);
+    }
+  };
 
   const fetchImages = async () => {
     try {
@@ -265,14 +685,21 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
     const counts: Record<string, number> = {};
     ORDERED_SECTIONS.forEach((s) => (counts[s] = 0));
 
-    const q = searchQuery.toLowerCase().trim();
+    const q = normalizeText(searchQuery);
 
     const filtered = images.filter((img) => {
       if (!q) return true;
-      const matchName = img.name.toLowerCase().includes(q);
-      const matchCat = (img.category || "").toLowerCase().includes(q);
-      const matchTitle = (img.aiDetectedTitle || "").toLowerCase().includes(q);
-      return matchName || matchCat || matchTitle;
+      const matchName = normalizeText(img.name).includes(q);
+      const matchCat = normalizeText(img.category || "").includes(q);
+      const matchTitle = normalizeText(img.aiDetectedTitle || "").includes(q);
+      const matchAssigned = products.some(
+        (p) =>
+          (p.image === img.url || (Array.isArray(p.images) && p.images.includes(img.url))) &&
+          (normalizeText(p.name).includes(q) ||
+            normalizeText(p.aisle || "").includes(q) ||
+            normalizeText(p.category || "").includes(q))
+      );
+      return matchName || matchCat || matchTitle || matchAssigned;
     });
 
     const grouped: Record<string, MediaItem[]> = {};
@@ -289,7 +716,7 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
       sectionCounts: counts,
       allFilteredCount: filtered.length,
     };
-  }, [images, searchQuery]);
+  }, [images, searchQuery, products]);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-fade-in text-left">
@@ -563,12 +990,12 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
                       {secImages.map((img) => (
                         <div
                           key={img.id}
-                          className="group relative rounded-2xl bg-[#141422] border border-white/10 overflow-hidden flex flex-col hover:border-[#ffd025] transition-all duration-200 hover:shadow-xl hover:shadow-[#ffd025]/10"
+                          className="group relative rounded-2xl bg-[#141422] border border-white/10 flex flex-col hover:border-[#ffd025] transition-all duration-200 hover:shadow-xl hover:shadow-[#ffd025]/10"
                         >
                           {/* Thumbnail Container */}
                           <div
                             onClick={() => setPreviewImage(img)}
-                            className="relative aspect-square w-full bg-[#0a0a10] cursor-pointer overflow-hidden flex items-center justify-center"
+                            className="relative aspect-square w-full bg-[#0a0a10] cursor-pointer overflow-hidden rounded-t-2xl flex items-center justify-center"
                           >
                             <img
                               src={img.url}
@@ -621,27 +1048,39 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
                             </div>
                           </div>
 
-                          {/* Info footer & Quick Category Switcher */}
-                          <div className="p-2.5 border-t border-white/5 space-y-1.5">
-                            <p className="text-[10.5px] sm:text-[11px] font-bold text-white truncate" title={img.name}>
-                              {img.name}
-                            </p>
+                          {/* Info footer & Quick Category Switcher & Product Assigner */}
+                          <div className="p-2.5 border-t border-white/5 space-y-1.5 flex-1 flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <p className="text-[10.5px] sm:text-[11px] font-bold text-white truncate" title={img.name}>
+                                {img.name}
+                              </p>
 
-                            {/* Cambiar categoría manualmente */}
-                            <div className="flex items-center gap-1">
-                              <select
-                                value={img.category || secName}
-                                onChange={(e) => handleUpdateCategory(img.id, e.target.value)}
-                                className="w-full bg-[#0c0c14] border border-white/10 rounded-lg px-1.5 py-1 text-[9.5px] font-semibold text-gray-300 focus:border-[#ffd025] focus:outline-none cursor-pointer"
-                                title="Cambiar sección de esta imagen"
-                              >
-                                {ORDERED_SECTIONS.map((s) => (
-                                  <option key={s} value={s} className="bg-[#141422] text-white">
-                                    {s}
-                                  </option>
-                                ))}
-                              </select>
+                              {/* Cambiar categoría manualmente */}
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={img.category || secName}
+                                  onChange={(e) => handleUpdateCategory(img.id, e.target.value)}
+                                  className="w-full bg-[#0c0c14] border border-white/10 rounded-lg px-1.5 py-1 text-[9.5px] font-semibold text-gray-300 focus:border-[#ffd025] focus:outline-none cursor-pointer"
+                                  title="Cambiar sección de esta imagen"
+                                >
+                                  {ORDERED_SECTIONS.map((s) => (
+                                    <option key={s} value={s} className="bg-[#141422] text-white">
+                                      {s}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             </div>
+
+                            {/* Buscador predictivo para asignar producto */}
+                            <ImageProductAssigner
+                              imageUrl={img.url}
+                              imageName={img.name}
+                              products={products}
+                              onAssign={handleAssignImageToProduct}
+                              onUnassign={handleUnassignImageFromProduct}
+                              mode="card"
+                            />
                           </div>
                         </div>
                       ))}
@@ -662,7 +1101,7 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative max-w-2xl w-full bg-[#141422] border-2 border-[#ffd025]/50 rounded-3xl overflow-hidden p-4 sm:p-6 shadow-2xl flex flex-col items-center"
+            className="relative max-w-2xl w-full bg-[#141422] border-2 border-[#ffd025]/50 rounded-3xl overflow-hidden p-4 sm:p-6 shadow-2xl flex flex-col items-center max-h-[90vh] overflow-y-auto"
           >
             <div className="w-full flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 truncate max-w-md">
@@ -681,16 +1120,31 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
               </button>
             </div>
 
-            <div className="w-full max-h-[60vh] bg-black/50 rounded-2xl overflow-hidden flex items-center justify-center p-2 mb-4">
+            <div className="w-full max-h-[48vh] bg-black/50 rounded-2xl overflow-hidden flex items-center justify-center p-2 mb-4">
               <img
                 src={previewImage.url}
                 alt={previewImage.name}
-                className="max-h-[55vh] max-w-full object-contain"
+                className="max-h-[45vh] max-w-full object-contain"
+              />
+            </div>
+
+            {/* Asignar a producto desde el preview modal */}
+            <div className="w-full bg-[#0e0e18] p-3.5 rounded-2xl border border-white/10 mb-4 text-left">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#ffd025] uppercase tracking-wider mb-2">
+                <Sparkles size={13} /> Asignar esta foto a un producto
+              </div>
+              <ImageProductAssigner
+                imageUrl={previewImage.url}
+                imageName={previewImage.name}
+                products={products}
+                onAssign={handleAssignImageToProduct}
+                onUnassign={handleUnassignImageFromProduct}
+                mode="modal"
               />
             </div>
 
             <div className="w-full flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
-              <span className="text-xs text-gray-400 font-mono">
+              <span className="text-xs text-gray-400 font-mono truncate max-w-xs">
                 {previewImage.url}
               </span>
               <div className="flex items-center gap-2">
@@ -710,6 +1164,14 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({ onMediaDeleted
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#161628]/95 border-2 border-[#ffd025] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 animate-bounce-in text-xs font-bold backdrop-blur-md">
+          <CheckCircle2 size={16} className="text-[#ffd025] shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>
