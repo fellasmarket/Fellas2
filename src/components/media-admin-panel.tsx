@@ -104,20 +104,32 @@ const normalizeText = (text: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
 
-interface ImageAssignedBadgesProps {
+interface CompactProductAssignerProps {
   imageUrl: string;
   products: MediaProduct[];
-  onOpenAssignModal: () => void;
+  onAssign: (imgUrl: string, productId: number, asPrimary: boolean) => Promise<void>;
   onUnassign: (imgUrl: string, productId: number) => Promise<void>;
 }
 
-export const ImageAssignedBadges: React.FC<ImageAssignedBadgesProps> = ({
+export const CompactProductAssigner: React.FC<CompactProductAssignerProps> = ({
   imageUrl,
   products,
-  onOpenAssignModal,
+  onAssign,
   onUnassign,
 }) => {
-  const [unassigningId, setUnassigningId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const assignedProducts = useMemo(() => {
     if (!imageUrl) return [];
@@ -128,118 +140,10 @@ export const ImageAssignedBadges: React.FC<ImageAssignedBadgesProps> = ({
     });
   }, [products, imageUrl]);
 
-  const handleRemove = async (productId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      setUnassigningId(productId);
-      await onUnassign(imageUrl, productId);
-    } finally {
-      setUnassigningId(null);
-    }
-  };
-
-  return (
-    <div className="w-full space-y-2 pt-1">
-      {/* Badges de productos asignados */}
-      {assignedProducts.length > 0 ? (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-[9px] text-gray-400 font-bold uppercase tracking-wider">
-            <span>Vinculada a:</span>
-            <span className="text-[#ffd025] font-mono font-bold bg-[#ffd025]/10 px-1.5 py-0.2 rounded-full">
-              {assignedProducts.length}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
-            {assignedProducts.map((p) => {
-              const isPrimary = p.image === imageUrl;
-              return (
-                <span
-                  key={p.id}
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-[#ffd025]/15 border border-[#ffd025]/30 text-[#ffd025] text-[9.5px] font-bold max-w-full"
-                  title={`Asignada a ${p.name} ${isPrimary ? '(Foto Principal)' : '(Galería)'}`}
-                >
-                  <Tag size={9} className="shrink-0" />
-                  <span className="truncate max-w-[85px] sm:max-w-[110px]">{p.name}</span>
-                  {isPrimary && (
-                    <span className="text-[7.5px] bg-[#ffd025] text-black px-1 rounded font-black shrink-0">
-                      1ª
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => handleRemove(p.id, e)}
-                    disabled={unassigningId === p.id}
-                    className="hover:text-red-400 text-gray-400 p-0.5 transition cursor-pointer"
-                    title="Desvincular imagen de este producto"
-                  >
-                    <X size={9} />
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <p className="text-[9px] text-gray-500 flex items-center gap-1 py-0.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-gray-600 inline-block shrink-0" />
-          <span className="truncate">Sin producto asignado</span>
-        </p>
-      )}
-
-      {/* Botón cómodo y espacioso para abrir el modal de asignación */}
-      <button
-        type="button"
-        onClick={onOpenAssignModal}
-        className="w-full py-2 px-2.5 rounded-xl bg-[#ffd025]/15 hover:bg-[#ffd025] text-[#ffd025] hover:text-black border border-[#ffd025]/40 font-black text-[10.5px] sm:text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer group"
-        title="Abrir buscador predictivo para asignar a producto"
-      >
-        <Search size={13} className="text-[#ffd025] group-hover:text-black shrink-0" strokeWidth={2.5} />
-        <span className="truncate">Asignar a Producto</span>
-      </button>
-    </div>
-  );
-};
-
-interface AssignProductModalProps {
-  image: MediaItem;
-  products: MediaProduct[];
-  onClose: () => void;
-  onAssign: (imgUrl: string, productId: number, asPrimary: boolean) => Promise<void>;
-  onUnassign: (imgUrl: string, productId: number) => Promise<void>;
-}
-
-export const AssignProductModal: React.FC<AssignProductModalProps> = ({
-  image,
-  products,
-  onClose,
-  onAssign,
-  onUnassign,
-}) => {
-  const [query, setQuery] = useState("");
-  const [assigningId, setAssigningId] = useState<number | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const assignedProducts = useMemo(() => {
-    if (!image.url) return [];
-    return products.filter((p) => {
-      if (p.image === image.url) return true;
-      if (Array.isArray(p.images) && p.images.includes(image.url)) return true;
-      return false;
-    });
-  }, [products, image.url]);
-
+  // ONLY show results when user types something! Never show unrequested products
   const matchingProducts = useMemo(() => {
     const q = normalizeText(query);
-    if (!q) {
-      return products.slice(0, 30);
-    }
+    if (!q) return [];
     return products
       .filter((p) => {
         const n = normalizeText(p.name);
@@ -248,288 +152,169 @@ export const AssignProductModal: React.FC<AssignProductModalProps> = ({
         const s = normalizeText(p.subcategory || "");
         return n.includes(q) || c.includes(q) || a.includes(q) || s.includes(q);
       })
-      .slice(0, 50);
+      .slice(0, 8);
   }, [products, query]);
 
-  const handleSelect = async (p: MediaProduct, asPrimary: boolean) => {
-    try {
-      setAssigningId(p.id);
-      await onAssign(image.url, p.id, asPrimary);
-    } finally {
-      setAssigningId(null);
-    }
-  };
-
-  const handleRemove = async (productId: number) => {
-    try {
-      setAssigningId(productId);
-      await onUnassign(image.url, productId);
-    } finally {
-      setAssigningId(null);
-    }
-  };
-
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fade-in"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative max-w-2xl w-full bg-[#131322] border-2 border-[#ffd025]/60 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-scale-in text-left"
-      >
-        {/* Encabezado con la foto seleccionada y título amplio */}
-        <div className="p-4 sm:p-5 bg-[#171728] border-b border-white/10 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-black/70 border border-white/10 overflow-hidden flex items-center justify-center shrink-0 p-1">
-              <img
-                src={image.url}
-                alt={image.name}
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src =
-                    "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
-                }}
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded-md bg-[#ffd025]/20 text-[#ffd025] text-[10px] font-black uppercase tracking-wider">
-                  {image.category || "General"}
-                </span>
-                <span className="text-xs text-gray-400 font-mono hidden sm:inline">
-                  {assignedProducts.length > 0 ? `${assignedProducts.length} producto(s) vinculado(s)` : "Sin vincular"}
-                </span>
-              </div>
-              <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-wider truncate">
-                Asignar Imagen a Producto
-              </h3>
-              <p className="text-[11px] text-gray-400 truncate max-w-md" title={image.name}>
-                Archivo: {image.name}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition cursor-pointer shrink-0 border border-white/10"
-            title="Cerrar ventana"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Resumen de productos que ya tienen esta imagen asignada */}
-        {assignedProducts.length > 0 && (
-          <div className="px-4 sm:px-5 py-3 bg-[#ffd025]/10 border-b border-[#ffd025]/20 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold text-[#ffd025] uppercase tracking-wider flex items-center gap-1 shrink-0">
-              <CheckCircle2 size={13} /> Asignada actualmente a:
-            </span>
-            <div className="flex flex-wrap gap-1.5 flex-1">
-              {assignedProducts.map((p) => {
-                const isPrimary = p.image === image.url;
-                const isBusy = assigningId === p.id;
-                return (
-                  <span
-                    key={p.id}
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-xl bg-black/60 border border-[#ffd025]/40 text-white text-xs font-bold"
-                  >
-                    <span>{p.name}</span>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded font-black uppercase bg-[#ffd025] text-black">
-                      {isPrimary ? "1ª Principal" : "Galería"}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => handleRemove(p.id)}
-                      className="text-gray-400 hover:text-red-400 p-0.5 transition cursor-pointer"
-                      title="Desvincular esta foto del producto"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Barra de Búsqueda Predictiva GRANDE Y ESPACIOSA */}
-        <div className="p-4 sm:p-5 border-b border-white/10 bg-[#0e0e1a] space-y-2">
-          <div className="relative w-full">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#ffd025]" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Escribe el nombre del producto (ej: Mistral, Heineken, Lays, Coca-Cola)..."
-              className="w-full pl-11 pr-11 py-3.5 bg-[#171728] border-2 border-[#ffd025]/40 focus:border-[#ffd025] rounded-2xl text-white placeholder-gray-400 text-xs sm:text-sm font-semibold shadow-inner focus:outline-none transition-all"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition"
+    <div ref={containerRef} className="relative w-full space-y-1 pt-1">
+      {/* Badges de productos vinculados actualmente */}
+      {assignedProducts.length > 0 && (
+        <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+          {assignedProducts.map((p) => {
+            const isPrimary = p.image === imageUrl;
+            return (
+              <span
+                key={p.id}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#ffd025]/15 border border-[#ffd025]/30 text-[#ffd025] text-[9px] font-bold max-w-full"
+                title={`${p.name} (${isPrimary ? "Foto 1ª" : "Galería"})`}
               >
-                <X size={16} />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] text-gray-400 px-1">
-            <span>
-              {query
-                ? `Coincidencias encontradas: ${matchingProducts.length}`
-                : `Sugerencias de productos de la tienda (${matchingProducts.length})`}
-            </span>
-            <span className="text-[#ffd025] font-bold hidden sm:inline">
-              Haz clic en &quot;⭐ Principal&quot; o &quot;➕ Galería&quot;
-            </span>
-          </div>
-        </div>
-
-        {/* Lista de coincidencias amplia, cómoda y sin solaparse */}
-        <div className="p-3 sm:p-5 overflow-y-auto space-y-2.5 flex-1 max-h-[50vh] bg-[#0c0c14]">
-          {matchingProducts.length === 0 ? (
-            <div className="py-12 px-4 text-center text-gray-400 space-y-2">
-              <ShoppingBag size={36} className="mx-auto text-gray-600 mb-2" />
-              <p className="text-sm font-bold text-white">
-                No se encontró ningún producto con &quot;{query}&quot;
-              </p>
-              <p className="text-xs text-gray-500">
-                Verifica el nombre o prueba buscando por categoría (ej: Cerveza, Pisco, Snack, Bebida).
-              </p>
-            </div>
-          ) : (
-            matchingProducts.map((p) => {
-              const isAssigned = p.image === image.url || (Array.isArray(p.images) && p.images.includes(image.url));
-              const isPrimary = p.image === image.url;
-              const isBusy = assigningId === p.id;
-
-              return (
-                <div
-                  key={p.id}
-                  className={`p-3 sm:p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                    isAssigned
-                      ? "bg-[#18182c] border-[#ffd025]/40 shadow-lg"
-                      : "bg-[#141422] border-white/5 hover:border-white/20 hover:bg-[#181828]"
-                  }`}
+                <span className="truncate max-w-[75px] sm:max-w-[90px]">{p.name}</span>
+                {isPrimary && (
+                  <span className="text-[7.5px] bg-[#ffd025] text-black px-1 rounded font-black shrink-0">
+                    1ª
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onUnassign(imageUrl, p.id)}
+                  className="hover:text-red-400 text-gray-400 p-0.5 transition cursor-pointer"
+                  title="Quitar vinculación"
                 >
-                  {/* Foto, Nombre y Datos del Producto */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-12 rounded-xl bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center shrink-0 p-1">
-                      {p.image ? (
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src =
-                              "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80";
-                          }}
-                        />
-                      ) : (
-                        <ShoppingBag size={18} className="text-gray-500" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs sm:text-sm font-black text-white truncate" title={p.name}>
-                        {p.name}
-                      </h4>
-                      <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-gray-400 mt-0.5">
-                        <span className="text-[#ffd025] font-mono font-bold text-xs">
-                          ${(p.price || 0).toLocaleString("es-CL")}
-                        </span>
-                        <span>•</span>
-                        <span className="px-2 py-0.5 rounded-md bg-white/5 text-gray-300 font-semibold text-[10px]">
-                          {p.aisle || p.category || "General"}
-                        </span>
-                        {p.subcategory && (
-                          <span className="text-gray-500 text-[10px] hidden sm:inline">
-                            / {p.subcategory}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <X size={9} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
-                  {/* Botones de acción cómodos, grandes y claros */}
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    {isAssigned ? (
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
-                          <Check size={14} /> Asignada {isPrimary ? "(1ª)" : "(Galería)"}
-                        </span>
-                        {!isPrimary && (
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => handleSelect(p, true)}
-                            className="px-3 py-1.5 rounded-xl bg-[#ffd025]/20 hover:bg-[#ffd025] text-[#ffd025] hover:text-black text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-[#ffd025]/40"
-                            title="Cambiar a foto principal de portada"
-                          >
-                            <Star size={12} />
-                            <span>Hacer 1ª Principal</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => handleRemove(p.id)}
-                          className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-red-500/30"
-                          title="Desvincular imagen de este producto"
-                        >
-                          <X size={12} />
-                          <span>Desvincular</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => handleSelect(p, true)}
-                          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] hover:scale-105 active:scale-95 text-black font-black uppercase text-[11px] tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-[#ffd025]/20 cursor-pointer"
-                          title="Establecer como la foto principal que se ve en la tienda"
-                        >
-                          <Star size={13} strokeWidth={2.5} />
-                          <span>⭐ Foto Principal</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => handleSelect(p, false)}
-                          className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-[11px] transition-all flex items-center gap-1.5 border border-white/10 cursor-pointer"
-                          title="Añadir como foto adicional en el carrusel del producto"
-                        >
-                          <Plus size={13} strokeWidth={2.5} />
-                          <span>➕ Galería</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+      {/* Barra de búsqueda pequeña */}
+      <div className="relative">
+        <div
+          className={`flex items-center gap-1 bg-[#0a0a12] border rounded-lg px-2 py-1 transition ${
+            isOpen && query.trim() ? "border-[#ffd025]" : "border-white/10"
+          }`}
+        >
+          <Search size={11} className="text-[#ffd025] shrink-0" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setIsOpen(true);
+            }}
+            onFocus={() => {
+              if (query.trim()) setIsOpen(true);
+            }}
+            placeholder="Buscar producto..."
+            className="w-full bg-transparent text-white text-[10px] placeholder-gray-500 focus:outline-none"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setIsOpen(false);
+              }}
+              className="text-gray-400 hover:text-white p-0.5 cursor-pointer"
+            >
+              <X size={10} />
+            </button>
           )}
         </div>
 
-        {/* Footer del Modal */}
-        <div className="p-4 sm:p-5 bg-[#171728] border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-[11px] text-gray-400">
-            Tip: Puedes asignar la misma imagen a más de un producto. Todos los cambios se guardan al instante.
-          </p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-black uppercase text-xs tracking-wider transition cursor-pointer"
-          >
-            Listo / Cerrar
-          </button>
-        </div>
+        {/* Menú desplegable pequeño con botones exclusivamente de iconos (sin texto) */}
+        {isOpen && query.trim().length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#161626]/98 border border-[#ffd025]/50 rounded-xl shadow-2xl p-1 max-h-44 overflow-y-auto space-y-1 text-left backdrop-blur-md">
+            {matchingProducts.length === 0 ? (
+              <div className="p-2 text-center text-gray-400 text-[9.5px]">
+                Sin coincidencias
+              </div>
+            ) : (
+              matchingProducts.map((p) => {
+                const isAssigned = p.image === imageUrl || (Array.isArray(p.images) && p.images.includes(imageUrl));
+                const isPrimary = p.image === imageUrl;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="p-1 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-between gap-1 text-[10px]"
+                  >
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="text-white font-bold truncate leading-tight" title={p.name}>
+                        {p.name}
+                      </p>
+                      <p className="text-[#ffd025] text-[8.5px] font-mono leading-none">
+                        ${(p.price || 0).toLocaleString("es-CL")}
+                      </p>
+                    </div>
+
+                    {/* Botones de solo iconos */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isAssigned ? (
+                        <>
+                          {!isPrimary && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onAssign(imageUrl, p.id, true);
+                                setQuery("");
+                                setIsOpen(false);
+                              }}
+                              className="p-1 rounded bg-[#ffd025]/20 hover:bg-[#ffd025] text-[#ffd025] hover:text-black transition cursor-pointer"
+                              title="Hacer foto principal"
+                            >
+                              <Star size={11} />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onUnassign(imageUrl, p.id);
+                              setQuery("");
+                              setIsOpen(false);
+                            }}
+                            className="p-1 rounded bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white transition cursor-pointer"
+                            title="Desvincular"
+                          >
+                            <X size={11} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onAssign(imageUrl, p.id, true);
+                              setQuery("");
+                              setIsOpen(false);
+                            }}
+                            className="p-1 rounded bg-[#ffd025] hover:bg-[#ffe066] text-black transition cursor-pointer shadow"
+                            title="Asignar como foto principal"
+                          >
+                            <Star size={11} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onAssign(imageUrl, p.id, false);
+                              setQuery("");
+                              setIsOpen(false);
+                            }}
+                            className="p-1 rounded bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                            title="Añadir a la galería"
+                          >
+                            <Plus size={11} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -552,7 +337,6 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({
   const [previewImage, setPreviewImage] = useState<MediaItem | null>(null);
   const [classifyingAI, setClassifyingAI] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
-  const [assigningImage, setAssigningImage] = useState<MediaItem | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1237,11 +1021,11 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({
                               </div>
                             </div>
 
-                            {/* Badges de asignación y botón para abrir buscador predictivo espacioso */}
-                            <ImageAssignedBadges
+                            {/* Buscador predictivo compacto con menú desplegable pequeño y botones de iconos */}
+                            <CompactProductAssigner
                               imageUrl={img.url}
                               products={products}
-                              onOpenAssignModal={() => setAssigningImage(img)}
+                              onAssign={handleAssignImageToProduct}
                               onUnassign={handleUnassignImageFromProduct}
                             />
                           </div>
@@ -1292,23 +1076,16 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({
             </div>
 
             {/* Asignar a producto desde el preview modal */}
-            <div className="w-full bg-[#0e0e18] p-4 rounded-2xl border border-white/10 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left">
-              <div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#ffd025] uppercase tracking-wider">
-                  <Sparkles size={13} /> Asignar esta foto a un producto
-                </div>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Abre la ventana de búsqueda predictiva para vincular esta imagen a productos del catálogo.
-                </p>
+            <div className="w-full bg-[#0e0e18] p-3 rounded-2xl border border-white/10 mb-4 text-left">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#ffd025] uppercase tracking-wider mb-1">
+                <Sparkles size={13} /> Asignar a producto
               </div>
-              <button
-                type="button"
-                onClick={() => setAssigningImage(previewImage)}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ffd025] via-[#ffda47] to-[#e6b800] hover:scale-105 active:scale-95 text-black font-black uppercase text-xs tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ffd025]/20 cursor-pointer shrink-0"
-              >
-                <Search size={14} strokeWidth={2.5} />
-                <span>Asignar a Producto</span>
-              </button>
+              <CompactProductAssigner
+                imageUrl={previewImage.url}
+                products={products}
+                onAssign={handleAssignImageToProduct}
+                onUnassign={handleUnassignImageFromProduct}
+              />
             </div>
 
             <div className="w-full flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
@@ -1333,17 +1110,6 @@ export const MediaAdminPanel: React.FC<MediaAdminPanelProps> = ({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Modal Dedicado y Espacioso de Asignación a Producto */}
-      {assigningImage && (
-        <AssignProductModal
-          image={assigningImage}
-          products={products}
-          onClose={() => setAssigningImage(null)}
-          onAssign={handleAssignImageToProduct}
-          onUnassign={handleUnassignImageFromProduct}
-        />
       )}
 
       {/* Floating Toast Notification */}
